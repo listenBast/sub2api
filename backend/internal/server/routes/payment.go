@@ -16,6 +16,7 @@ func RegisterPaymentRoutes(
 	paymentHandler *handler.PaymentHandler,
 	webhookHandler *handler.PaymentWebhookHandler,
 	adminPaymentHandler *admin.PaymentHandler,
+	teamHandler *handler.TeamHandler,
 	jwtAuth middleware.JWTAuthMiddleware,
 	adminAuth middleware.AdminAuthMiddleware,
 	auditLog middleware.AuditLogMiddleware,
@@ -36,8 +37,8 @@ func RegisterPaymentRoutes(
 
 		orders := authenticated.Group("/orders")
 		{
-			orders.POST("", paymentHandler.CreateOrder)
-			orders.POST("/verify", paymentHandler.VerifyOrder)
+			orders.POST("", teamHandler.RequireIndependentAccount, paymentHandler.CreateOrder)
+			orders.POST("/verify", teamHandler.RequireIndependentAccount, paymentHandler.VerifyOrder)
 			orders.GET("/my", paymentHandler.GetMyOrders)
 			orders.GET("/:id", paymentHandler.GetOrder)
 			orders.POST("/:id/cancel", paymentHandler.CancelOrder)

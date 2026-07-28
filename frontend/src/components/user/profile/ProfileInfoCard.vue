@@ -24,8 +24,8 @@
                 <h2 class="truncate text-2xl font-semibold text-gray-900 dark:text-white">
                   {{ displayName }}
                 </h2>
-                <span :class="['badge', user?.role === 'admin' ? 'badge-primary' : 'badge-gray']">
-                  {{ user?.role === 'admin' ? t('profile.administrator') : t('profile.user') }}
+                <span :class="['badge', accountRoleClass]">
+                  {{ accountRoleLabel }}
                 </span>
                 <span
                   :class="['badge', user?.status === 'active' ? 'badge-success' : 'badge-danger']"
@@ -186,6 +186,7 @@ import Icon from '@/components/icons/Icon.vue'
 import ProfileAvatarCard from '@/components/user/profile/ProfileAvatarCard.vue'
 import ProfileEditForm from '@/components/user/profile/ProfileEditForm.vue'
 import ProfileIdentityBindingsSection from '@/components/user/profile/ProfileIdentityBindingsSection.vue'
+import { useTeamStore } from '@/stores/team'
 import type { User, UserAuthBindingStatus, UserAuthProvider, UserProfileSourceContext } from '@/types'
 
 const props = withDefaults(defineProps<{
@@ -208,6 +209,7 @@ const props = withDefaults(defineProps<{
 })
 
 const { t } = useI18n()
+const teamStore = useTeamStore()
 
 function normalizeBindingStatus(binding: boolean | UserAuthBindingStatus | undefined): boolean | null {
   if (typeof binding === 'boolean') {
@@ -233,6 +235,13 @@ function isEmailBound(user: User | null | undefined): boolean {
 }
 
 const avatarUrl = computed(() => props.user?.avatar_url?.trim() || '')
+const accountRoleLabel = computed(() => {
+  if (props.user?.role === 'admin') return t('profile.administrator')
+  if (teamStore.role === 'owner') return t('profile.team')
+  if (teamStore.role === 'member') return t('profile.teamMember')
+  return t('profile.user')
+})
+const accountRoleClass = computed(() => props.user?.role === 'admin' || teamStore.role === 'owner' ? 'badge-primary' : 'badge-gray')
 const displayName = computed(() => props.user?.username?.trim() || props.user?.email?.trim() || t('profile.user'))
 const primaryEmailDisplay = computed(() => {
   const email = props.user?.email?.trim() || ''

@@ -1,0 +1,2 @@
+ALTER TABLE team_memberships
+    ADD COLUMN IF NOT EXISTS remark VARCHAR(100) NOT NULL DEFAULT '';

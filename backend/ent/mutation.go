@@ -43,6 +43,9 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/securitysecret"
 	"github.com/Wei-Shaw/sub2api/ent/setting"
 	"github.com/Wei-Shaw/sub2api/ent/subscriptionplan"
+	"github.com/Wei-Shaw/sub2api/ent/team"
+	"github.com/Wei-Shaw/sub2api/ent/teammembership"
+	"github.com/Wei-Shaw/sub2api/ent/teamtransaction"
 	"github.com/Wei-Shaw/sub2api/ent/tlsfingerprintprofile"
 	"github.com/Wei-Shaw/sub2api/ent/usagecleanuptask"
 	"github.com/Wei-Shaw/sub2api/ent/usagelog"
@@ -95,6 +98,9 @@ const (
 	TypeSetting                       = "Setting"
 	TypeSubscriptionPlan              = "SubscriptionPlan"
 	TypeTLSFingerprintProfile         = "TLSFingerprintProfile"
+	TypeTeam                          = "Team"
+	TypeTeamMembership                = "TeamMembership"
+	TypeTeamTransaction               = "TeamTransaction"
 	TypeUsageCleanupTask              = "UsageCleanupTask"
 	TypeUsageLog                      = "UsageLog"
 	TypeUser                          = "User"
@@ -42035,6 +42041,2925 @@ func (m *TLSFingerprintProfileMutation) ResetEdge(name string) error {
 	return fmt.Errorf("unknown TLSFingerprintProfile edge %s", name)
 }
 
+// TeamMutation represents an operation that mutates the Team nodes in the graph.
+type TeamMutation struct {
+	config
+	op                  Op
+	typ                 string
+	id                  *int64
+	created_at          *time.Time
+	updated_at          *time.Time
+	name                *string
+	status              *string
+	clearedFields       map[string]struct{}
+	owner               *int64
+	clearedowner        bool
+	memberships         map[int64]struct{}
+	removedmemberships  map[int64]struct{}
+	clearedmemberships  bool
+	transactions        map[int64]struct{}
+	removedtransactions map[int64]struct{}
+	clearedtransactions bool
+	done                bool
+	oldValue            func(context.Context) (*Team, error)
+	predicates          []predicate.Team
+}
+
+var _ ent.Mutation = (*TeamMutation)(nil)
+
+// teamOption allows management of the mutation configuration using functional options.
+type teamOption func(*TeamMutation)
+
+// newTeamMutation creates new mutation for the Team entity.
+func newTeamMutation(c config, op Op, opts ...teamOption) *TeamMutation {
+	m := &TeamMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeTeam,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withTeamID sets the ID field of the mutation.
+func withTeamID(id int64) teamOption {
+	return func(m *TeamMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *Team
+		)
+		m.oldValue = func(ctx context.Context) (*Team, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().Team.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withTeam sets the old Team of the mutation.
+func withTeam(node *Team) teamOption {
+	return func(m *TeamMutation) {
+		m.oldValue = func(context.Context) (*Team, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m TeamMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m TeamMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *TeamMutation) ID() (id int64, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *TeamMutation) IDs(ctx context.Context) ([]int64, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int64{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().Team.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *TeamMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *TeamMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the Team entity.
+// If the Team object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *TeamMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *TeamMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *TeamMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *TeamMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the Team entity.
+// If the Team object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *TeamMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *TeamMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// SetName sets the "name" field.
+func (m *TeamMutation) SetName(s string) {
+	m.name = &s
+}
+
+// Name returns the value of the "name" field in the mutation.
+func (m *TeamMutation) Name() (r string, exists bool) {
+	v := m.name
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldName returns the old "name" field's value of the Team entity.
+// If the Team object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *TeamMutation) OldName(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldName is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldName requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldName: %w", err)
+	}
+	return oldValue.Name, nil
+}
+
+// ResetName resets all changes to the "name" field.
+func (m *TeamMutation) ResetName() {
+	m.name = nil
+}
+
+// SetOwnerID sets the "owner_id" field.
+func (m *TeamMutation) SetOwnerID(i int64) {
+	m.owner = &i
+}
+
+// OwnerID returns the value of the "owner_id" field in the mutation.
+func (m *TeamMutation) OwnerID() (r int64, exists bool) {
+	v := m.owner
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldOwnerID returns the old "owner_id" field's value of the Team entity.
+// If the Team object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *TeamMutation) OldOwnerID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldOwnerID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldOwnerID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldOwnerID: %w", err)
+	}
+	return oldValue.OwnerID, nil
+}
+
+// ResetOwnerID resets all changes to the "owner_id" field.
+func (m *TeamMutation) ResetOwnerID() {
+	m.owner = nil
+}
+
+// SetStatus sets the "status" field.
+func (m *TeamMutation) SetStatus(s string) {
+	m.status = &s
+}
+
+// Status returns the value of the "status" field in the mutation.
+func (m *TeamMutation) Status() (r string, exists bool) {
+	v := m.status
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldStatus returns the old "status" field's value of the Team entity.
+// If the Team object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *TeamMutation) OldStatus(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldStatus is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldStatus requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldStatus: %w", err)
+	}
+	return oldValue.Status, nil
+}
+
+// ResetStatus resets all changes to the "status" field.
+func (m *TeamMutation) ResetStatus() {
+	m.status = nil
+}
+
+// ClearOwner clears the "owner" edge to the User entity.
+func (m *TeamMutation) ClearOwner() {
+	m.clearedowner = true
+	m.clearedFields[team.FieldOwnerID] = struct{}{}
+}
+
+// OwnerCleared reports if the "owner" edge to the User entity was cleared.
+func (m *TeamMutation) OwnerCleared() bool {
+	return m.clearedowner
+}
+
+// OwnerIDs returns the "owner" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// OwnerID instead. It exists only for internal usage by the builders.
+func (m *TeamMutation) OwnerIDs() (ids []int64) {
+	if id := m.owner; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetOwner resets all changes to the "owner" edge.
+func (m *TeamMutation) ResetOwner() {
+	m.owner = nil
+	m.clearedowner = false
+}
+
+// AddMembershipIDs adds the "memberships" edge to the TeamMembership entity by ids.
+func (m *TeamMutation) AddMembershipIDs(ids ...int64) {
+	if m.memberships == nil {
+		m.memberships = make(map[int64]struct{})
+	}
+	for i := range ids {
+		m.memberships[ids[i]] = struct{}{}
+	}
+}
+
+// ClearMemberships clears the "memberships" edge to the TeamMembership entity.
+func (m *TeamMutation) ClearMemberships() {
+	m.clearedmemberships = true
+}
+
+// MembershipsCleared reports if the "memberships" edge to the TeamMembership entity was cleared.
+func (m *TeamMutation) MembershipsCleared() bool {
+	return m.clearedmemberships
+}
+
+// RemoveMembershipIDs removes the "memberships" edge to the TeamMembership entity by IDs.
+func (m *TeamMutation) RemoveMembershipIDs(ids ...int64) {
+	if m.removedmemberships == nil {
+		m.removedmemberships = make(map[int64]struct{})
+	}
+	for i := range ids {
+		delete(m.memberships, ids[i])
+		m.removedmemberships[ids[i]] = struct{}{}
+	}
+}
+
+// RemovedMemberships returns the removed IDs of the "memberships" edge to the TeamMembership entity.
+func (m *TeamMutation) RemovedMembershipsIDs() (ids []int64) {
+	for id := range m.removedmemberships {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// MembershipsIDs returns the "memberships" edge IDs in the mutation.
+func (m *TeamMutation) MembershipsIDs() (ids []int64) {
+	for id := range m.memberships {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResetMemberships resets all changes to the "memberships" edge.
+func (m *TeamMutation) ResetMemberships() {
+	m.memberships = nil
+	m.clearedmemberships = false
+	m.removedmemberships = nil
+}
+
+// AddTransactionIDs adds the "transactions" edge to the TeamTransaction entity by ids.
+func (m *TeamMutation) AddTransactionIDs(ids ...int64) {
+	if m.transactions == nil {
+		m.transactions = make(map[int64]struct{})
+	}
+	for i := range ids {
+		m.transactions[ids[i]] = struct{}{}
+	}
+}
+
+// ClearTransactions clears the "transactions" edge to the TeamTransaction entity.
+func (m *TeamMutation) ClearTransactions() {
+	m.clearedtransactions = true
+}
+
+// TransactionsCleared reports if the "transactions" edge to the TeamTransaction entity was cleared.
+func (m *TeamMutation) TransactionsCleared() bool {
+	return m.clearedtransactions
+}
+
+// RemoveTransactionIDs removes the "transactions" edge to the TeamTransaction entity by IDs.
+func (m *TeamMutation) RemoveTransactionIDs(ids ...int64) {
+	if m.removedtransactions == nil {
+		m.removedtransactions = make(map[int64]struct{})
+	}
+	for i := range ids {
+		delete(m.transactions, ids[i])
+		m.removedtransactions[ids[i]] = struct{}{}
+	}
+}
+
+// RemovedTransactions returns the removed IDs of the "transactions" edge to the TeamTransaction entity.
+func (m *TeamMutation) RemovedTransactionsIDs() (ids []int64) {
+	for id := range m.removedtransactions {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// TransactionsIDs returns the "transactions" edge IDs in the mutation.
+func (m *TeamMutation) TransactionsIDs() (ids []int64) {
+	for id := range m.transactions {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResetTransactions resets all changes to the "transactions" edge.
+func (m *TeamMutation) ResetTransactions() {
+	m.transactions = nil
+	m.clearedtransactions = false
+	m.removedtransactions = nil
+}
+
+// Where appends a list predicates to the TeamMutation builder.
+func (m *TeamMutation) Where(ps ...predicate.Team) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the TeamMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *TeamMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.Team, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *TeamMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *TeamMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (Team).
+func (m *TeamMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *TeamMutation) Fields() []string {
+	fields := make([]string, 0, 5)
+	if m.created_at != nil {
+		fields = append(fields, team.FieldCreatedAt)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, team.FieldUpdatedAt)
+	}
+	if m.name != nil {
+		fields = append(fields, team.FieldName)
+	}
+	if m.owner != nil {
+		fields = append(fields, team.FieldOwnerID)
+	}
+	if m.status != nil {
+		fields = append(fields, team.FieldStatus)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *TeamMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case team.FieldCreatedAt:
+		return m.CreatedAt()
+	case team.FieldUpdatedAt:
+		return m.UpdatedAt()
+	case team.FieldName:
+		return m.Name()
+	case team.FieldOwnerID:
+		return m.OwnerID()
+	case team.FieldStatus:
+		return m.Status()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *TeamMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case team.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case team.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	case team.FieldName:
+		return m.OldName(ctx)
+	case team.FieldOwnerID:
+		return m.OldOwnerID(ctx)
+	case team.FieldStatus:
+		return m.OldStatus(ctx)
+	}
+	return nil, fmt.Errorf("unknown Team field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *TeamMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case team.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case team.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	case team.FieldName:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetName(v)
+		return nil
+	case team.FieldOwnerID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetOwnerID(v)
+		return nil
+	case team.FieldStatus:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetStatus(v)
+		return nil
+	}
+	return fmt.Errorf("unknown Team field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *TeamMutation) AddedFields() []string {
+	var fields []string
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *TeamMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *TeamMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	}
+	return fmt.Errorf("unknown Team numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *TeamMutation) ClearedFields() []string {
+	return nil
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *TeamMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *TeamMutation) ClearField(name string) error {
+	return fmt.Errorf("unknown Team nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *TeamMutation) ResetField(name string) error {
+	switch name {
+	case team.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case team.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	case team.FieldName:
+		m.ResetName()
+		return nil
+	case team.FieldOwnerID:
+		m.ResetOwnerID()
+		return nil
+	case team.FieldStatus:
+		m.ResetStatus()
+		return nil
+	}
+	return fmt.Errorf("unknown Team field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *TeamMutation) AddedEdges() []string {
+	edges := make([]string, 0, 3)
+	if m.owner != nil {
+		edges = append(edges, team.EdgeOwner)
+	}
+	if m.memberships != nil {
+		edges = append(edges, team.EdgeMemberships)
+	}
+	if m.transactions != nil {
+		edges = append(edges, team.EdgeTransactions)
+	}
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *TeamMutation) AddedIDs(name string) []ent.Value {
+	switch name {
+	case team.EdgeOwner:
+		if id := m.owner; id != nil {
+			return []ent.Value{*id}
+		}
+	case team.EdgeMemberships:
+		ids := make([]ent.Value, 0, len(m.memberships))
+		for id := range m.memberships {
+			ids = append(ids, id)
+		}
+		return ids
+	case team.EdgeTransactions:
+		ids := make([]ent.Value, 0, len(m.transactions))
+		for id := range m.transactions {
+			ids = append(ids, id)
+		}
+		return ids
+	}
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *TeamMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 3)
+	if m.removedmemberships != nil {
+		edges = append(edges, team.EdgeMemberships)
+	}
+	if m.removedtransactions != nil {
+		edges = append(edges, team.EdgeTransactions)
+	}
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *TeamMutation) RemovedIDs(name string) []ent.Value {
+	switch name {
+	case team.EdgeMemberships:
+		ids := make([]ent.Value, 0, len(m.removedmemberships))
+		for id := range m.removedmemberships {
+			ids = append(ids, id)
+		}
+		return ids
+	case team.EdgeTransactions:
+		ids := make([]ent.Value, 0, len(m.removedtransactions))
+		for id := range m.removedtransactions {
+			ids = append(ids, id)
+		}
+		return ids
+	}
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *TeamMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 3)
+	if m.clearedowner {
+		edges = append(edges, team.EdgeOwner)
+	}
+	if m.clearedmemberships {
+		edges = append(edges, team.EdgeMemberships)
+	}
+	if m.clearedtransactions {
+		edges = append(edges, team.EdgeTransactions)
+	}
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *TeamMutation) EdgeCleared(name string) bool {
+	switch name {
+	case team.EdgeOwner:
+		return m.clearedowner
+	case team.EdgeMemberships:
+		return m.clearedmemberships
+	case team.EdgeTransactions:
+		return m.clearedtransactions
+	}
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *TeamMutation) ClearEdge(name string) error {
+	switch name {
+	case team.EdgeOwner:
+		m.ClearOwner()
+		return nil
+	}
+	return fmt.Errorf("unknown Team unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *TeamMutation) ResetEdge(name string) error {
+	switch name {
+	case team.EdgeOwner:
+		m.ResetOwner()
+		return nil
+	case team.EdgeMemberships:
+		m.ResetMemberships()
+		return nil
+	case team.EdgeTransactions:
+		m.ResetTransactions()
+		return nil
+	}
+	return fmt.Errorf("unknown Team edge %s", name)
+}
+
+// TeamMembershipMutation represents an operation that mutates the TeamMembership nodes in the graph.
+type TeamMembershipMutation struct {
+	config
+	op                Op
+	typ               string
+	id                *int64
+	created_at        *time.Time
+	updated_at        *time.Time
+	invited_by        *int64
+	addinvited_by     *int64
+	remark            *string
+	status            *string
+	joined_at         *time.Time
+	exit_requested_at *time.Time
+	clearedFields     map[string]struct{}
+	team              *int64
+	clearedteam       bool
+	user              *int64
+	cleareduser       bool
+	done              bool
+	oldValue          func(context.Context) (*TeamMembership, error)
+	predicates        []predicate.TeamMembership
+}
+
+var _ ent.Mutation = (*TeamMembershipMutation)(nil)
+
+// teammembershipOption allows management of the mutation configuration using functional options.
+type teammembershipOption func(*TeamMembershipMutation)
+
+// newTeamMembershipMutation creates new mutation for the TeamMembership entity.
+func newTeamMembershipMutation(c config, op Op, opts ...teammembershipOption) *TeamMembershipMutation {
+	m := &TeamMembershipMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeTeamMembership,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withTeamMembershipID sets the ID field of the mutation.
+func withTeamMembershipID(id int64) teammembershipOption {
+	return func(m *TeamMembershipMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *TeamMembership
+		)
+		m.oldValue = func(ctx context.Context) (*TeamMembership, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().TeamMembership.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withTeamMembership sets the old TeamMembership of the mutation.
+func withTeamMembership(node *TeamMembership) teammembershipOption {
+	return func(m *TeamMembershipMutation) {
+		m.oldValue = func(context.Context) (*TeamMembership, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m TeamMembershipMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m TeamMembershipMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *TeamMembershipMutation) ID() (id int64, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *TeamMembershipMutation) IDs(ctx context.Context) ([]int64, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int64{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().TeamMembership.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *TeamMembershipMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *TeamMembershipMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the TeamMembership entity.
+// If the TeamMembership object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *TeamMembershipMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *TeamMembershipMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *TeamMembershipMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *TeamMembershipMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the TeamMembership entity.
+// If the TeamMembership object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *TeamMembershipMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *TeamMembershipMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// SetTeamID sets the "team_id" field.
+func (m *TeamMembershipMutation) SetTeamID(i int64) {
+	m.team = &i
+}
+
+// TeamID returns the value of the "team_id" field in the mutation.
+func (m *TeamMembershipMutation) TeamID() (r int64, exists bool) {
+	v := m.team
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTeamID returns the old "team_id" field's value of the TeamMembership entity.
+// If the TeamMembership object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *TeamMembershipMutation) OldTeamID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTeamID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTeamID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTeamID: %w", err)
+	}
+	return oldValue.TeamID, nil
+}
+
+// ResetTeamID resets all changes to the "team_id" field.
+func (m *TeamMembershipMutation) ResetTeamID() {
+	m.team = nil
+}
+
+// SetUserID sets the "user_id" field.
+func (m *TeamMembershipMutation) SetUserID(i int64) {
+	m.user = &i
+}
+
+// UserID returns the value of the "user_id" field in the mutation.
+func (m *TeamMembershipMutation) UserID() (r int64, exists bool) {
+	v := m.user
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUserID returns the old "user_id" field's value of the TeamMembership entity.
+// If the TeamMembership object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *TeamMembershipMutation) OldUserID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUserID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUserID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUserID: %w", err)
+	}
+	return oldValue.UserID, nil
+}
+
+// ResetUserID resets all changes to the "user_id" field.
+func (m *TeamMembershipMutation) ResetUserID() {
+	m.user = nil
+}
+
+// SetInvitedBy sets the "invited_by" field.
+func (m *TeamMembershipMutation) SetInvitedBy(i int64) {
+	m.invited_by = &i
+	m.addinvited_by = nil
+}
+
+// InvitedBy returns the value of the "invited_by" field in the mutation.
+func (m *TeamMembershipMutation) InvitedBy() (r int64, exists bool) {
+	v := m.invited_by
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldInvitedBy returns the old "invited_by" field's value of the TeamMembership entity.
+// If the TeamMembership object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *TeamMembershipMutation) OldInvitedBy(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldInvitedBy is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldInvitedBy requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldInvitedBy: %w", err)
+	}
+	return oldValue.InvitedBy, nil
+}
+
+// AddInvitedBy adds i to the "invited_by" field.
+func (m *TeamMembershipMutation) AddInvitedBy(i int64) {
+	if m.addinvited_by != nil {
+		*m.addinvited_by += i
+	} else {
+		m.addinvited_by = &i
+	}
+}
+
+// AddedInvitedBy returns the value that was added to the "invited_by" field in this mutation.
+func (m *TeamMembershipMutation) AddedInvitedBy() (r int64, exists bool) {
+	v := m.addinvited_by
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetInvitedBy resets all changes to the "invited_by" field.
+func (m *TeamMembershipMutation) ResetInvitedBy() {
+	m.invited_by = nil
+	m.addinvited_by = nil
+}
+
+// SetRemark sets the "remark" field.
+func (m *TeamMembershipMutation) SetRemark(s string) {
+	m.remark = &s
+}
+
+// Remark returns the value of the "remark" field in the mutation.
+func (m *TeamMembershipMutation) Remark() (r string, exists bool) {
+	v := m.remark
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRemark returns the old "remark" field's value of the TeamMembership entity.
+// If the TeamMembership object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *TeamMembershipMutation) OldRemark(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRemark is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRemark requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRemark: %w", err)
+	}
+	return oldValue.Remark, nil
+}
+
+// ResetRemark resets all changes to the "remark" field.
+func (m *TeamMembershipMutation) ResetRemark() {
+	m.remark = nil
+}
+
+// SetStatus sets the "status" field.
+func (m *TeamMembershipMutation) SetStatus(s string) {
+	m.status = &s
+}
+
+// Status returns the value of the "status" field in the mutation.
+func (m *TeamMembershipMutation) Status() (r string, exists bool) {
+	v := m.status
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldStatus returns the old "status" field's value of the TeamMembership entity.
+// If the TeamMembership object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *TeamMembershipMutation) OldStatus(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldStatus is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldStatus requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldStatus: %w", err)
+	}
+	return oldValue.Status, nil
+}
+
+// ResetStatus resets all changes to the "status" field.
+func (m *TeamMembershipMutation) ResetStatus() {
+	m.status = nil
+}
+
+// SetJoinedAt sets the "joined_at" field.
+func (m *TeamMembershipMutation) SetJoinedAt(t time.Time) {
+	m.joined_at = &t
+}
+
+// JoinedAt returns the value of the "joined_at" field in the mutation.
+func (m *TeamMembershipMutation) JoinedAt() (r time.Time, exists bool) {
+	v := m.joined_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldJoinedAt returns the old "joined_at" field's value of the TeamMembership entity.
+// If the TeamMembership object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *TeamMembershipMutation) OldJoinedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldJoinedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldJoinedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldJoinedAt: %w", err)
+	}
+	return oldValue.JoinedAt, nil
+}
+
+// ClearJoinedAt clears the value of the "joined_at" field.
+func (m *TeamMembershipMutation) ClearJoinedAt() {
+	m.joined_at = nil
+	m.clearedFields[teammembership.FieldJoinedAt] = struct{}{}
+}
+
+// JoinedAtCleared returns if the "joined_at" field was cleared in this mutation.
+func (m *TeamMembershipMutation) JoinedAtCleared() bool {
+	_, ok := m.clearedFields[teammembership.FieldJoinedAt]
+	return ok
+}
+
+// ResetJoinedAt resets all changes to the "joined_at" field.
+func (m *TeamMembershipMutation) ResetJoinedAt() {
+	m.joined_at = nil
+	delete(m.clearedFields, teammembership.FieldJoinedAt)
+}
+
+// SetExitRequestedAt sets the "exit_requested_at" field.
+func (m *TeamMembershipMutation) SetExitRequestedAt(t time.Time) {
+	m.exit_requested_at = &t
+}
+
+// ExitRequestedAt returns the value of the "exit_requested_at" field in the mutation.
+func (m *TeamMembershipMutation) ExitRequestedAt() (r time.Time, exists bool) {
+	v := m.exit_requested_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldExitRequestedAt returns the old "exit_requested_at" field's value of the TeamMembership entity.
+// If the TeamMembership object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *TeamMembershipMutation) OldExitRequestedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldExitRequestedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldExitRequestedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldExitRequestedAt: %w", err)
+	}
+	return oldValue.ExitRequestedAt, nil
+}
+
+// ClearExitRequestedAt clears the value of the "exit_requested_at" field.
+func (m *TeamMembershipMutation) ClearExitRequestedAt() {
+	m.exit_requested_at = nil
+	m.clearedFields[teammembership.FieldExitRequestedAt] = struct{}{}
+}
+
+// ExitRequestedAtCleared returns if the "exit_requested_at" field was cleared in this mutation.
+func (m *TeamMembershipMutation) ExitRequestedAtCleared() bool {
+	_, ok := m.clearedFields[teammembership.FieldExitRequestedAt]
+	return ok
+}
+
+// ResetExitRequestedAt resets all changes to the "exit_requested_at" field.
+func (m *TeamMembershipMutation) ResetExitRequestedAt() {
+	m.exit_requested_at = nil
+	delete(m.clearedFields, teammembership.FieldExitRequestedAt)
+}
+
+// ClearTeam clears the "team" edge to the Team entity.
+func (m *TeamMembershipMutation) ClearTeam() {
+	m.clearedteam = true
+	m.clearedFields[teammembership.FieldTeamID] = struct{}{}
+}
+
+// TeamCleared reports if the "team" edge to the Team entity was cleared.
+func (m *TeamMembershipMutation) TeamCleared() bool {
+	return m.clearedteam
+}
+
+// TeamIDs returns the "team" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// TeamID instead. It exists only for internal usage by the builders.
+func (m *TeamMembershipMutation) TeamIDs() (ids []int64) {
+	if id := m.team; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetTeam resets all changes to the "team" edge.
+func (m *TeamMembershipMutation) ResetTeam() {
+	m.team = nil
+	m.clearedteam = false
+}
+
+// ClearUser clears the "user" edge to the User entity.
+func (m *TeamMembershipMutation) ClearUser() {
+	m.cleareduser = true
+	m.clearedFields[teammembership.FieldUserID] = struct{}{}
+}
+
+// UserCleared reports if the "user" edge to the User entity was cleared.
+func (m *TeamMembershipMutation) UserCleared() bool {
+	return m.cleareduser
+}
+
+// UserIDs returns the "user" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// UserID instead. It exists only for internal usage by the builders.
+func (m *TeamMembershipMutation) UserIDs() (ids []int64) {
+	if id := m.user; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetUser resets all changes to the "user" edge.
+func (m *TeamMembershipMutation) ResetUser() {
+	m.user = nil
+	m.cleareduser = false
+}
+
+// Where appends a list predicates to the TeamMembershipMutation builder.
+func (m *TeamMembershipMutation) Where(ps ...predicate.TeamMembership) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the TeamMembershipMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *TeamMembershipMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.TeamMembership, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *TeamMembershipMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *TeamMembershipMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (TeamMembership).
+func (m *TeamMembershipMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *TeamMembershipMutation) Fields() []string {
+	fields := make([]string, 0, 9)
+	if m.created_at != nil {
+		fields = append(fields, teammembership.FieldCreatedAt)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, teammembership.FieldUpdatedAt)
+	}
+	if m.team != nil {
+		fields = append(fields, teammembership.FieldTeamID)
+	}
+	if m.user != nil {
+		fields = append(fields, teammembership.FieldUserID)
+	}
+	if m.invited_by != nil {
+		fields = append(fields, teammembership.FieldInvitedBy)
+	}
+	if m.remark != nil {
+		fields = append(fields, teammembership.FieldRemark)
+	}
+	if m.status != nil {
+		fields = append(fields, teammembership.FieldStatus)
+	}
+	if m.joined_at != nil {
+		fields = append(fields, teammembership.FieldJoinedAt)
+	}
+	if m.exit_requested_at != nil {
+		fields = append(fields, teammembership.FieldExitRequestedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *TeamMembershipMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case teammembership.FieldCreatedAt:
+		return m.CreatedAt()
+	case teammembership.FieldUpdatedAt:
+		return m.UpdatedAt()
+	case teammembership.FieldTeamID:
+		return m.TeamID()
+	case teammembership.FieldUserID:
+		return m.UserID()
+	case teammembership.FieldInvitedBy:
+		return m.InvitedBy()
+	case teammembership.FieldRemark:
+		return m.Remark()
+	case teammembership.FieldStatus:
+		return m.Status()
+	case teammembership.FieldJoinedAt:
+		return m.JoinedAt()
+	case teammembership.FieldExitRequestedAt:
+		return m.ExitRequestedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *TeamMembershipMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case teammembership.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case teammembership.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	case teammembership.FieldTeamID:
+		return m.OldTeamID(ctx)
+	case teammembership.FieldUserID:
+		return m.OldUserID(ctx)
+	case teammembership.FieldInvitedBy:
+		return m.OldInvitedBy(ctx)
+	case teammembership.FieldRemark:
+		return m.OldRemark(ctx)
+	case teammembership.FieldStatus:
+		return m.OldStatus(ctx)
+	case teammembership.FieldJoinedAt:
+		return m.OldJoinedAt(ctx)
+	case teammembership.FieldExitRequestedAt:
+		return m.OldExitRequestedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown TeamMembership field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *TeamMembershipMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case teammembership.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case teammembership.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	case teammembership.FieldTeamID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTeamID(v)
+		return nil
+	case teammembership.FieldUserID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUserID(v)
+		return nil
+	case teammembership.FieldInvitedBy:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetInvitedBy(v)
+		return nil
+	case teammembership.FieldRemark:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRemark(v)
+		return nil
+	case teammembership.FieldStatus:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetStatus(v)
+		return nil
+	case teammembership.FieldJoinedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetJoinedAt(v)
+		return nil
+	case teammembership.FieldExitRequestedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetExitRequestedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown TeamMembership field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *TeamMembershipMutation) AddedFields() []string {
+	var fields []string
+	if m.addinvited_by != nil {
+		fields = append(fields, teammembership.FieldInvitedBy)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *TeamMembershipMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case teammembership.FieldInvitedBy:
+		return m.AddedInvitedBy()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *TeamMembershipMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case teammembership.FieldInvitedBy:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddInvitedBy(v)
+		return nil
+	}
+	return fmt.Errorf("unknown TeamMembership numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *TeamMembershipMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(teammembership.FieldJoinedAt) {
+		fields = append(fields, teammembership.FieldJoinedAt)
+	}
+	if m.FieldCleared(teammembership.FieldExitRequestedAt) {
+		fields = append(fields, teammembership.FieldExitRequestedAt)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *TeamMembershipMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *TeamMembershipMutation) ClearField(name string) error {
+	switch name {
+	case teammembership.FieldJoinedAt:
+		m.ClearJoinedAt()
+		return nil
+	case teammembership.FieldExitRequestedAt:
+		m.ClearExitRequestedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown TeamMembership nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *TeamMembershipMutation) ResetField(name string) error {
+	switch name {
+	case teammembership.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case teammembership.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	case teammembership.FieldTeamID:
+		m.ResetTeamID()
+		return nil
+	case teammembership.FieldUserID:
+		m.ResetUserID()
+		return nil
+	case teammembership.FieldInvitedBy:
+		m.ResetInvitedBy()
+		return nil
+	case teammembership.FieldRemark:
+		m.ResetRemark()
+		return nil
+	case teammembership.FieldStatus:
+		m.ResetStatus()
+		return nil
+	case teammembership.FieldJoinedAt:
+		m.ResetJoinedAt()
+		return nil
+	case teammembership.FieldExitRequestedAt:
+		m.ResetExitRequestedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown TeamMembership field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *TeamMembershipMutation) AddedEdges() []string {
+	edges := make([]string, 0, 2)
+	if m.team != nil {
+		edges = append(edges, teammembership.EdgeTeam)
+	}
+	if m.user != nil {
+		edges = append(edges, teammembership.EdgeUser)
+	}
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *TeamMembershipMutation) AddedIDs(name string) []ent.Value {
+	switch name {
+	case teammembership.EdgeTeam:
+		if id := m.team; id != nil {
+			return []ent.Value{*id}
+		}
+	case teammembership.EdgeUser:
+		if id := m.user; id != nil {
+			return []ent.Value{*id}
+		}
+	}
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *TeamMembershipMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 2)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *TeamMembershipMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *TeamMembershipMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 2)
+	if m.clearedteam {
+		edges = append(edges, teammembership.EdgeTeam)
+	}
+	if m.cleareduser {
+		edges = append(edges, teammembership.EdgeUser)
+	}
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *TeamMembershipMutation) EdgeCleared(name string) bool {
+	switch name {
+	case teammembership.EdgeTeam:
+		return m.clearedteam
+	case teammembership.EdgeUser:
+		return m.cleareduser
+	}
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *TeamMembershipMutation) ClearEdge(name string) error {
+	switch name {
+	case teammembership.EdgeTeam:
+		m.ClearTeam()
+		return nil
+	case teammembership.EdgeUser:
+		m.ClearUser()
+		return nil
+	}
+	return fmt.Errorf("unknown TeamMembership unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *TeamMembershipMutation) ResetEdge(name string) error {
+	switch name {
+	case teammembership.EdgeTeam:
+		m.ResetTeam()
+		return nil
+	case teammembership.EdgeUser:
+		m.ResetUser()
+		return nil
+	}
+	return fmt.Errorf("unknown TeamMembership edge %s", name)
+}
+
+// TeamTransactionMutation represents an operation that mutates the TeamTransaction nodes in the graph.
+type TeamTransactionMutation struct {
+	config
+	op                       Op
+	typ                      string
+	id                       *int64
+	operator_id              *int64
+	addoperator_id           *int64
+	member_id                *int64
+	addmember_id             *int64
+	action                   *string
+	amount                   *float64
+	addamount                *float64
+	owner_balance_before     *float64
+	addowner_balance_before  *float64
+	owner_balance_after      *float64
+	addowner_balance_after   *float64
+	member_balance_before    *float64
+	addmember_balance_before *float64
+	member_balance_after     *float64
+	addmember_balance_after  *float64
+	note                     *string
+	created_at               *time.Time
+	clearedFields            map[string]struct{}
+	team                     *int64
+	clearedteam              bool
+	done                     bool
+	oldValue                 func(context.Context) (*TeamTransaction, error)
+	predicates               []predicate.TeamTransaction
+}
+
+var _ ent.Mutation = (*TeamTransactionMutation)(nil)
+
+// teamtransactionOption allows management of the mutation configuration using functional options.
+type teamtransactionOption func(*TeamTransactionMutation)
+
+// newTeamTransactionMutation creates new mutation for the TeamTransaction entity.
+func newTeamTransactionMutation(c config, op Op, opts ...teamtransactionOption) *TeamTransactionMutation {
+	m := &TeamTransactionMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeTeamTransaction,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withTeamTransactionID sets the ID field of the mutation.
+func withTeamTransactionID(id int64) teamtransactionOption {
+	return func(m *TeamTransactionMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *TeamTransaction
+		)
+		m.oldValue = func(ctx context.Context) (*TeamTransaction, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().TeamTransaction.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withTeamTransaction sets the old TeamTransaction of the mutation.
+func withTeamTransaction(node *TeamTransaction) teamtransactionOption {
+	return func(m *TeamTransactionMutation) {
+		m.oldValue = func(context.Context) (*TeamTransaction, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m TeamTransactionMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m TeamTransactionMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *TeamTransactionMutation) ID() (id int64, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *TeamTransactionMutation) IDs(ctx context.Context) ([]int64, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int64{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().TeamTransaction.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetTeamID sets the "team_id" field.
+func (m *TeamTransactionMutation) SetTeamID(i int64) {
+	m.team = &i
+}
+
+// TeamID returns the value of the "team_id" field in the mutation.
+func (m *TeamTransactionMutation) TeamID() (r int64, exists bool) {
+	v := m.team
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTeamID returns the old "team_id" field's value of the TeamTransaction entity.
+// If the TeamTransaction object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *TeamTransactionMutation) OldTeamID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTeamID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTeamID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTeamID: %w", err)
+	}
+	return oldValue.TeamID, nil
+}
+
+// ResetTeamID resets all changes to the "team_id" field.
+func (m *TeamTransactionMutation) ResetTeamID() {
+	m.team = nil
+}
+
+// SetOperatorID sets the "operator_id" field.
+func (m *TeamTransactionMutation) SetOperatorID(i int64) {
+	m.operator_id = &i
+	m.addoperator_id = nil
+}
+
+// OperatorID returns the value of the "operator_id" field in the mutation.
+func (m *TeamTransactionMutation) OperatorID() (r int64, exists bool) {
+	v := m.operator_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldOperatorID returns the old "operator_id" field's value of the TeamTransaction entity.
+// If the TeamTransaction object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *TeamTransactionMutation) OldOperatorID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldOperatorID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldOperatorID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldOperatorID: %w", err)
+	}
+	return oldValue.OperatorID, nil
+}
+
+// AddOperatorID adds i to the "operator_id" field.
+func (m *TeamTransactionMutation) AddOperatorID(i int64) {
+	if m.addoperator_id != nil {
+		*m.addoperator_id += i
+	} else {
+		m.addoperator_id = &i
+	}
+}
+
+// AddedOperatorID returns the value that was added to the "operator_id" field in this mutation.
+func (m *TeamTransactionMutation) AddedOperatorID() (r int64, exists bool) {
+	v := m.addoperator_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetOperatorID resets all changes to the "operator_id" field.
+func (m *TeamTransactionMutation) ResetOperatorID() {
+	m.operator_id = nil
+	m.addoperator_id = nil
+}
+
+// SetMemberID sets the "member_id" field.
+func (m *TeamTransactionMutation) SetMemberID(i int64) {
+	m.member_id = &i
+	m.addmember_id = nil
+}
+
+// MemberID returns the value of the "member_id" field in the mutation.
+func (m *TeamTransactionMutation) MemberID() (r int64, exists bool) {
+	v := m.member_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldMemberID returns the old "member_id" field's value of the TeamTransaction entity.
+// If the TeamTransaction object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *TeamTransactionMutation) OldMemberID(ctx context.Context) (v *int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldMemberID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldMemberID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldMemberID: %w", err)
+	}
+	return oldValue.MemberID, nil
+}
+
+// AddMemberID adds i to the "member_id" field.
+func (m *TeamTransactionMutation) AddMemberID(i int64) {
+	if m.addmember_id != nil {
+		*m.addmember_id += i
+	} else {
+		m.addmember_id = &i
+	}
+}
+
+// AddedMemberID returns the value that was added to the "member_id" field in this mutation.
+func (m *TeamTransactionMutation) AddedMemberID() (r int64, exists bool) {
+	v := m.addmember_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearMemberID clears the value of the "member_id" field.
+func (m *TeamTransactionMutation) ClearMemberID() {
+	m.member_id = nil
+	m.addmember_id = nil
+	m.clearedFields[teamtransaction.FieldMemberID] = struct{}{}
+}
+
+// MemberIDCleared returns if the "member_id" field was cleared in this mutation.
+func (m *TeamTransactionMutation) MemberIDCleared() bool {
+	_, ok := m.clearedFields[teamtransaction.FieldMemberID]
+	return ok
+}
+
+// ResetMemberID resets all changes to the "member_id" field.
+func (m *TeamTransactionMutation) ResetMemberID() {
+	m.member_id = nil
+	m.addmember_id = nil
+	delete(m.clearedFields, teamtransaction.FieldMemberID)
+}
+
+// SetAction sets the "action" field.
+func (m *TeamTransactionMutation) SetAction(s string) {
+	m.action = &s
+}
+
+// Action returns the value of the "action" field in the mutation.
+func (m *TeamTransactionMutation) Action() (r string, exists bool) {
+	v := m.action
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAction returns the old "action" field's value of the TeamTransaction entity.
+// If the TeamTransaction object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *TeamTransactionMutation) OldAction(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAction is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAction requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAction: %w", err)
+	}
+	return oldValue.Action, nil
+}
+
+// ResetAction resets all changes to the "action" field.
+func (m *TeamTransactionMutation) ResetAction() {
+	m.action = nil
+}
+
+// SetAmount sets the "amount" field.
+func (m *TeamTransactionMutation) SetAmount(f float64) {
+	m.amount = &f
+	m.addamount = nil
+}
+
+// Amount returns the value of the "amount" field in the mutation.
+func (m *TeamTransactionMutation) Amount() (r float64, exists bool) {
+	v := m.amount
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAmount returns the old "amount" field's value of the TeamTransaction entity.
+// If the TeamTransaction object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *TeamTransactionMutation) OldAmount(ctx context.Context) (v float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAmount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAmount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAmount: %w", err)
+	}
+	return oldValue.Amount, nil
+}
+
+// AddAmount adds f to the "amount" field.
+func (m *TeamTransactionMutation) AddAmount(f float64) {
+	if m.addamount != nil {
+		*m.addamount += f
+	} else {
+		m.addamount = &f
+	}
+}
+
+// AddedAmount returns the value that was added to the "amount" field in this mutation.
+func (m *TeamTransactionMutation) AddedAmount() (r float64, exists bool) {
+	v := m.addamount
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetAmount resets all changes to the "amount" field.
+func (m *TeamTransactionMutation) ResetAmount() {
+	m.amount = nil
+	m.addamount = nil
+}
+
+// SetOwnerBalanceBefore sets the "owner_balance_before" field.
+func (m *TeamTransactionMutation) SetOwnerBalanceBefore(f float64) {
+	m.owner_balance_before = &f
+	m.addowner_balance_before = nil
+}
+
+// OwnerBalanceBefore returns the value of the "owner_balance_before" field in the mutation.
+func (m *TeamTransactionMutation) OwnerBalanceBefore() (r float64, exists bool) {
+	v := m.owner_balance_before
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldOwnerBalanceBefore returns the old "owner_balance_before" field's value of the TeamTransaction entity.
+// If the TeamTransaction object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *TeamTransactionMutation) OldOwnerBalanceBefore(ctx context.Context) (v float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldOwnerBalanceBefore is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldOwnerBalanceBefore requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldOwnerBalanceBefore: %w", err)
+	}
+	return oldValue.OwnerBalanceBefore, nil
+}
+
+// AddOwnerBalanceBefore adds f to the "owner_balance_before" field.
+func (m *TeamTransactionMutation) AddOwnerBalanceBefore(f float64) {
+	if m.addowner_balance_before != nil {
+		*m.addowner_balance_before += f
+	} else {
+		m.addowner_balance_before = &f
+	}
+}
+
+// AddedOwnerBalanceBefore returns the value that was added to the "owner_balance_before" field in this mutation.
+func (m *TeamTransactionMutation) AddedOwnerBalanceBefore() (r float64, exists bool) {
+	v := m.addowner_balance_before
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetOwnerBalanceBefore resets all changes to the "owner_balance_before" field.
+func (m *TeamTransactionMutation) ResetOwnerBalanceBefore() {
+	m.owner_balance_before = nil
+	m.addowner_balance_before = nil
+}
+
+// SetOwnerBalanceAfter sets the "owner_balance_after" field.
+func (m *TeamTransactionMutation) SetOwnerBalanceAfter(f float64) {
+	m.owner_balance_after = &f
+	m.addowner_balance_after = nil
+}
+
+// OwnerBalanceAfter returns the value of the "owner_balance_after" field in the mutation.
+func (m *TeamTransactionMutation) OwnerBalanceAfter() (r float64, exists bool) {
+	v := m.owner_balance_after
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldOwnerBalanceAfter returns the old "owner_balance_after" field's value of the TeamTransaction entity.
+// If the TeamTransaction object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *TeamTransactionMutation) OldOwnerBalanceAfter(ctx context.Context) (v float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldOwnerBalanceAfter is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldOwnerBalanceAfter requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldOwnerBalanceAfter: %w", err)
+	}
+	return oldValue.OwnerBalanceAfter, nil
+}
+
+// AddOwnerBalanceAfter adds f to the "owner_balance_after" field.
+func (m *TeamTransactionMutation) AddOwnerBalanceAfter(f float64) {
+	if m.addowner_balance_after != nil {
+		*m.addowner_balance_after += f
+	} else {
+		m.addowner_balance_after = &f
+	}
+}
+
+// AddedOwnerBalanceAfter returns the value that was added to the "owner_balance_after" field in this mutation.
+func (m *TeamTransactionMutation) AddedOwnerBalanceAfter() (r float64, exists bool) {
+	v := m.addowner_balance_after
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetOwnerBalanceAfter resets all changes to the "owner_balance_after" field.
+func (m *TeamTransactionMutation) ResetOwnerBalanceAfter() {
+	m.owner_balance_after = nil
+	m.addowner_balance_after = nil
+}
+
+// SetMemberBalanceBefore sets the "member_balance_before" field.
+func (m *TeamTransactionMutation) SetMemberBalanceBefore(f float64) {
+	m.member_balance_before = &f
+	m.addmember_balance_before = nil
+}
+
+// MemberBalanceBefore returns the value of the "member_balance_before" field in the mutation.
+func (m *TeamTransactionMutation) MemberBalanceBefore() (r float64, exists bool) {
+	v := m.member_balance_before
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldMemberBalanceBefore returns the old "member_balance_before" field's value of the TeamTransaction entity.
+// If the TeamTransaction object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *TeamTransactionMutation) OldMemberBalanceBefore(ctx context.Context) (v *float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldMemberBalanceBefore is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldMemberBalanceBefore requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldMemberBalanceBefore: %w", err)
+	}
+	return oldValue.MemberBalanceBefore, nil
+}
+
+// AddMemberBalanceBefore adds f to the "member_balance_before" field.
+func (m *TeamTransactionMutation) AddMemberBalanceBefore(f float64) {
+	if m.addmember_balance_before != nil {
+		*m.addmember_balance_before += f
+	} else {
+		m.addmember_balance_before = &f
+	}
+}
+
+// AddedMemberBalanceBefore returns the value that was added to the "member_balance_before" field in this mutation.
+func (m *TeamTransactionMutation) AddedMemberBalanceBefore() (r float64, exists bool) {
+	v := m.addmember_balance_before
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearMemberBalanceBefore clears the value of the "member_balance_before" field.
+func (m *TeamTransactionMutation) ClearMemberBalanceBefore() {
+	m.member_balance_before = nil
+	m.addmember_balance_before = nil
+	m.clearedFields[teamtransaction.FieldMemberBalanceBefore] = struct{}{}
+}
+
+// MemberBalanceBeforeCleared returns if the "member_balance_before" field was cleared in this mutation.
+func (m *TeamTransactionMutation) MemberBalanceBeforeCleared() bool {
+	_, ok := m.clearedFields[teamtransaction.FieldMemberBalanceBefore]
+	return ok
+}
+
+// ResetMemberBalanceBefore resets all changes to the "member_balance_before" field.
+func (m *TeamTransactionMutation) ResetMemberBalanceBefore() {
+	m.member_balance_before = nil
+	m.addmember_balance_before = nil
+	delete(m.clearedFields, teamtransaction.FieldMemberBalanceBefore)
+}
+
+// SetMemberBalanceAfter sets the "member_balance_after" field.
+func (m *TeamTransactionMutation) SetMemberBalanceAfter(f float64) {
+	m.member_balance_after = &f
+	m.addmember_balance_after = nil
+}
+
+// MemberBalanceAfter returns the value of the "member_balance_after" field in the mutation.
+func (m *TeamTransactionMutation) MemberBalanceAfter() (r float64, exists bool) {
+	v := m.member_balance_after
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldMemberBalanceAfter returns the old "member_balance_after" field's value of the TeamTransaction entity.
+// If the TeamTransaction object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *TeamTransactionMutation) OldMemberBalanceAfter(ctx context.Context) (v *float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldMemberBalanceAfter is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldMemberBalanceAfter requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldMemberBalanceAfter: %w", err)
+	}
+	return oldValue.MemberBalanceAfter, nil
+}
+
+// AddMemberBalanceAfter adds f to the "member_balance_after" field.
+func (m *TeamTransactionMutation) AddMemberBalanceAfter(f float64) {
+	if m.addmember_balance_after != nil {
+		*m.addmember_balance_after += f
+	} else {
+		m.addmember_balance_after = &f
+	}
+}
+
+// AddedMemberBalanceAfter returns the value that was added to the "member_balance_after" field in this mutation.
+func (m *TeamTransactionMutation) AddedMemberBalanceAfter() (r float64, exists bool) {
+	v := m.addmember_balance_after
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearMemberBalanceAfter clears the value of the "member_balance_after" field.
+func (m *TeamTransactionMutation) ClearMemberBalanceAfter() {
+	m.member_balance_after = nil
+	m.addmember_balance_after = nil
+	m.clearedFields[teamtransaction.FieldMemberBalanceAfter] = struct{}{}
+}
+
+// MemberBalanceAfterCleared returns if the "member_balance_after" field was cleared in this mutation.
+func (m *TeamTransactionMutation) MemberBalanceAfterCleared() bool {
+	_, ok := m.clearedFields[teamtransaction.FieldMemberBalanceAfter]
+	return ok
+}
+
+// ResetMemberBalanceAfter resets all changes to the "member_balance_after" field.
+func (m *TeamTransactionMutation) ResetMemberBalanceAfter() {
+	m.member_balance_after = nil
+	m.addmember_balance_after = nil
+	delete(m.clearedFields, teamtransaction.FieldMemberBalanceAfter)
+}
+
+// SetNote sets the "note" field.
+func (m *TeamTransactionMutation) SetNote(s string) {
+	m.note = &s
+}
+
+// Note returns the value of the "note" field in the mutation.
+func (m *TeamTransactionMutation) Note() (r string, exists bool) {
+	v := m.note
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldNote returns the old "note" field's value of the TeamTransaction entity.
+// If the TeamTransaction object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *TeamTransactionMutation) OldNote(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldNote is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldNote requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldNote: %w", err)
+	}
+	return oldValue.Note, nil
+}
+
+// ResetNote resets all changes to the "note" field.
+func (m *TeamTransactionMutation) ResetNote() {
+	m.note = nil
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *TeamTransactionMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *TeamTransactionMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the TeamTransaction entity.
+// If the TeamTransaction object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *TeamTransactionMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *TeamTransactionMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// ClearTeam clears the "team" edge to the Team entity.
+func (m *TeamTransactionMutation) ClearTeam() {
+	m.clearedteam = true
+	m.clearedFields[teamtransaction.FieldTeamID] = struct{}{}
+}
+
+// TeamCleared reports if the "team" edge to the Team entity was cleared.
+func (m *TeamTransactionMutation) TeamCleared() bool {
+	return m.clearedteam
+}
+
+// TeamIDs returns the "team" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// TeamID instead. It exists only for internal usage by the builders.
+func (m *TeamTransactionMutation) TeamIDs() (ids []int64) {
+	if id := m.team; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetTeam resets all changes to the "team" edge.
+func (m *TeamTransactionMutation) ResetTeam() {
+	m.team = nil
+	m.clearedteam = false
+}
+
+// Where appends a list predicates to the TeamTransactionMutation builder.
+func (m *TeamTransactionMutation) Where(ps ...predicate.TeamTransaction) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the TeamTransactionMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *TeamTransactionMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.TeamTransaction, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *TeamTransactionMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *TeamTransactionMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (TeamTransaction).
+func (m *TeamTransactionMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *TeamTransactionMutation) Fields() []string {
+	fields := make([]string, 0, 11)
+	if m.team != nil {
+		fields = append(fields, teamtransaction.FieldTeamID)
+	}
+	if m.operator_id != nil {
+		fields = append(fields, teamtransaction.FieldOperatorID)
+	}
+	if m.member_id != nil {
+		fields = append(fields, teamtransaction.FieldMemberID)
+	}
+	if m.action != nil {
+		fields = append(fields, teamtransaction.FieldAction)
+	}
+	if m.amount != nil {
+		fields = append(fields, teamtransaction.FieldAmount)
+	}
+	if m.owner_balance_before != nil {
+		fields = append(fields, teamtransaction.FieldOwnerBalanceBefore)
+	}
+	if m.owner_balance_after != nil {
+		fields = append(fields, teamtransaction.FieldOwnerBalanceAfter)
+	}
+	if m.member_balance_before != nil {
+		fields = append(fields, teamtransaction.FieldMemberBalanceBefore)
+	}
+	if m.member_balance_after != nil {
+		fields = append(fields, teamtransaction.FieldMemberBalanceAfter)
+	}
+	if m.note != nil {
+		fields = append(fields, teamtransaction.FieldNote)
+	}
+	if m.created_at != nil {
+		fields = append(fields, teamtransaction.FieldCreatedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *TeamTransactionMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case teamtransaction.FieldTeamID:
+		return m.TeamID()
+	case teamtransaction.FieldOperatorID:
+		return m.OperatorID()
+	case teamtransaction.FieldMemberID:
+		return m.MemberID()
+	case teamtransaction.FieldAction:
+		return m.Action()
+	case teamtransaction.FieldAmount:
+		return m.Amount()
+	case teamtransaction.FieldOwnerBalanceBefore:
+		return m.OwnerBalanceBefore()
+	case teamtransaction.FieldOwnerBalanceAfter:
+		return m.OwnerBalanceAfter()
+	case teamtransaction.FieldMemberBalanceBefore:
+		return m.MemberBalanceBefore()
+	case teamtransaction.FieldMemberBalanceAfter:
+		return m.MemberBalanceAfter()
+	case teamtransaction.FieldNote:
+		return m.Note()
+	case teamtransaction.FieldCreatedAt:
+		return m.CreatedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *TeamTransactionMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case teamtransaction.FieldTeamID:
+		return m.OldTeamID(ctx)
+	case teamtransaction.FieldOperatorID:
+		return m.OldOperatorID(ctx)
+	case teamtransaction.FieldMemberID:
+		return m.OldMemberID(ctx)
+	case teamtransaction.FieldAction:
+		return m.OldAction(ctx)
+	case teamtransaction.FieldAmount:
+		return m.OldAmount(ctx)
+	case teamtransaction.FieldOwnerBalanceBefore:
+		return m.OldOwnerBalanceBefore(ctx)
+	case teamtransaction.FieldOwnerBalanceAfter:
+		return m.OldOwnerBalanceAfter(ctx)
+	case teamtransaction.FieldMemberBalanceBefore:
+		return m.OldMemberBalanceBefore(ctx)
+	case teamtransaction.FieldMemberBalanceAfter:
+		return m.OldMemberBalanceAfter(ctx)
+	case teamtransaction.FieldNote:
+		return m.OldNote(ctx)
+	case teamtransaction.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown TeamTransaction field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *TeamTransactionMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case teamtransaction.FieldTeamID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTeamID(v)
+		return nil
+	case teamtransaction.FieldOperatorID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetOperatorID(v)
+		return nil
+	case teamtransaction.FieldMemberID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetMemberID(v)
+		return nil
+	case teamtransaction.FieldAction:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAction(v)
+		return nil
+	case teamtransaction.FieldAmount:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAmount(v)
+		return nil
+	case teamtransaction.FieldOwnerBalanceBefore:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetOwnerBalanceBefore(v)
+		return nil
+	case teamtransaction.FieldOwnerBalanceAfter:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetOwnerBalanceAfter(v)
+		return nil
+	case teamtransaction.FieldMemberBalanceBefore:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetMemberBalanceBefore(v)
+		return nil
+	case teamtransaction.FieldMemberBalanceAfter:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetMemberBalanceAfter(v)
+		return nil
+	case teamtransaction.FieldNote:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetNote(v)
+		return nil
+	case teamtransaction.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown TeamTransaction field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *TeamTransactionMutation) AddedFields() []string {
+	var fields []string
+	if m.addoperator_id != nil {
+		fields = append(fields, teamtransaction.FieldOperatorID)
+	}
+	if m.addmember_id != nil {
+		fields = append(fields, teamtransaction.FieldMemberID)
+	}
+	if m.addamount != nil {
+		fields = append(fields, teamtransaction.FieldAmount)
+	}
+	if m.addowner_balance_before != nil {
+		fields = append(fields, teamtransaction.FieldOwnerBalanceBefore)
+	}
+	if m.addowner_balance_after != nil {
+		fields = append(fields, teamtransaction.FieldOwnerBalanceAfter)
+	}
+	if m.addmember_balance_before != nil {
+		fields = append(fields, teamtransaction.FieldMemberBalanceBefore)
+	}
+	if m.addmember_balance_after != nil {
+		fields = append(fields, teamtransaction.FieldMemberBalanceAfter)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *TeamTransactionMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case teamtransaction.FieldOperatorID:
+		return m.AddedOperatorID()
+	case teamtransaction.FieldMemberID:
+		return m.AddedMemberID()
+	case teamtransaction.FieldAmount:
+		return m.AddedAmount()
+	case teamtransaction.FieldOwnerBalanceBefore:
+		return m.AddedOwnerBalanceBefore()
+	case teamtransaction.FieldOwnerBalanceAfter:
+		return m.AddedOwnerBalanceAfter()
+	case teamtransaction.FieldMemberBalanceBefore:
+		return m.AddedMemberBalanceBefore()
+	case teamtransaction.FieldMemberBalanceAfter:
+		return m.AddedMemberBalanceAfter()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *TeamTransactionMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case teamtransaction.FieldOperatorID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddOperatorID(v)
+		return nil
+	case teamtransaction.FieldMemberID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddMemberID(v)
+		return nil
+	case teamtransaction.FieldAmount:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddAmount(v)
+		return nil
+	case teamtransaction.FieldOwnerBalanceBefore:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddOwnerBalanceBefore(v)
+		return nil
+	case teamtransaction.FieldOwnerBalanceAfter:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddOwnerBalanceAfter(v)
+		return nil
+	case teamtransaction.FieldMemberBalanceBefore:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddMemberBalanceBefore(v)
+		return nil
+	case teamtransaction.FieldMemberBalanceAfter:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddMemberBalanceAfter(v)
+		return nil
+	}
+	return fmt.Errorf("unknown TeamTransaction numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *TeamTransactionMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(teamtransaction.FieldMemberID) {
+		fields = append(fields, teamtransaction.FieldMemberID)
+	}
+	if m.FieldCleared(teamtransaction.FieldMemberBalanceBefore) {
+		fields = append(fields, teamtransaction.FieldMemberBalanceBefore)
+	}
+	if m.FieldCleared(teamtransaction.FieldMemberBalanceAfter) {
+		fields = append(fields, teamtransaction.FieldMemberBalanceAfter)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *TeamTransactionMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *TeamTransactionMutation) ClearField(name string) error {
+	switch name {
+	case teamtransaction.FieldMemberID:
+		m.ClearMemberID()
+		return nil
+	case teamtransaction.FieldMemberBalanceBefore:
+		m.ClearMemberBalanceBefore()
+		return nil
+	case teamtransaction.FieldMemberBalanceAfter:
+		m.ClearMemberBalanceAfter()
+		return nil
+	}
+	return fmt.Errorf("unknown TeamTransaction nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *TeamTransactionMutation) ResetField(name string) error {
+	switch name {
+	case teamtransaction.FieldTeamID:
+		m.ResetTeamID()
+		return nil
+	case teamtransaction.FieldOperatorID:
+		m.ResetOperatorID()
+		return nil
+	case teamtransaction.FieldMemberID:
+		m.ResetMemberID()
+		return nil
+	case teamtransaction.FieldAction:
+		m.ResetAction()
+		return nil
+	case teamtransaction.FieldAmount:
+		m.ResetAmount()
+		return nil
+	case teamtransaction.FieldOwnerBalanceBefore:
+		m.ResetOwnerBalanceBefore()
+		return nil
+	case teamtransaction.FieldOwnerBalanceAfter:
+		m.ResetOwnerBalanceAfter()
+		return nil
+	case teamtransaction.FieldMemberBalanceBefore:
+		m.ResetMemberBalanceBefore()
+		return nil
+	case teamtransaction.FieldMemberBalanceAfter:
+		m.ResetMemberBalanceAfter()
+		return nil
+	case teamtransaction.FieldNote:
+		m.ResetNote()
+		return nil
+	case teamtransaction.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown TeamTransaction field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *TeamTransactionMutation) AddedEdges() []string {
+	edges := make([]string, 0, 1)
+	if m.team != nil {
+		edges = append(edges, teamtransaction.EdgeTeam)
+	}
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *TeamTransactionMutation) AddedIDs(name string) []ent.Value {
+	switch name {
+	case teamtransaction.EdgeTeam:
+		if id := m.team; id != nil {
+			return []ent.Value{*id}
+		}
+	}
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *TeamTransactionMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 1)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *TeamTransactionMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *TeamTransactionMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 1)
+	if m.clearedteam {
+		edges = append(edges, teamtransaction.EdgeTeam)
+	}
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *TeamTransactionMutation) EdgeCleared(name string) bool {
+	switch name {
+	case teamtransaction.EdgeTeam:
+		return m.clearedteam
+	}
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *TeamTransactionMutation) ClearEdge(name string) error {
+	switch name {
+	case teamtransaction.EdgeTeam:
+		m.ClearTeam()
+		return nil
+	}
+	return fmt.Errorf("unknown TeamTransaction unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *TeamTransactionMutation) ResetEdge(name string) error {
+	switch name {
+	case teamtransaction.EdgeTeam:
+		m.ResetTeam()
+		return nil
+	}
+	return fmt.Errorf("unknown TeamTransaction edge %s", name)
+}
+
 // UsageCleanupTaskMutation represents an operation that mutates the UsageCleanupTask nodes in the graph.
 type UsageCleanupTaskMutation struct {
 	config
@@ -47218,6 +50143,10 @@ type UserMutation struct {
 	platform_quotas               map[int64]struct{}
 	removedplatform_quotas        map[int64]struct{}
 	clearedplatform_quotas        bool
+	owned_team                    *int64
+	clearedowned_team             bool
+	team_membership               *int64
+	clearedteam_membership        bool
 	done                          bool
 	oldValue                      func(context.Context) (*User, error)
 	predicates                    []predicate.User
@@ -49086,6 +52015,84 @@ func (m *UserMutation) ResetPlatformQuotas() {
 	m.removedplatform_quotas = nil
 }
 
+// SetOwnedTeamID sets the "owned_team" edge to the Team entity by id.
+func (m *UserMutation) SetOwnedTeamID(id int64) {
+	m.owned_team = &id
+}
+
+// ClearOwnedTeam clears the "owned_team" edge to the Team entity.
+func (m *UserMutation) ClearOwnedTeam() {
+	m.clearedowned_team = true
+}
+
+// OwnedTeamCleared reports if the "owned_team" edge to the Team entity was cleared.
+func (m *UserMutation) OwnedTeamCleared() bool {
+	return m.clearedowned_team
+}
+
+// OwnedTeamID returns the "owned_team" edge ID in the mutation.
+func (m *UserMutation) OwnedTeamID() (id int64, exists bool) {
+	if m.owned_team != nil {
+		return *m.owned_team, true
+	}
+	return
+}
+
+// OwnedTeamIDs returns the "owned_team" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// OwnedTeamID instead. It exists only for internal usage by the builders.
+func (m *UserMutation) OwnedTeamIDs() (ids []int64) {
+	if id := m.owned_team; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetOwnedTeam resets all changes to the "owned_team" edge.
+func (m *UserMutation) ResetOwnedTeam() {
+	m.owned_team = nil
+	m.clearedowned_team = false
+}
+
+// SetTeamMembershipID sets the "team_membership" edge to the TeamMembership entity by id.
+func (m *UserMutation) SetTeamMembershipID(id int64) {
+	m.team_membership = &id
+}
+
+// ClearTeamMembership clears the "team_membership" edge to the TeamMembership entity.
+func (m *UserMutation) ClearTeamMembership() {
+	m.clearedteam_membership = true
+}
+
+// TeamMembershipCleared reports if the "team_membership" edge to the TeamMembership entity was cleared.
+func (m *UserMutation) TeamMembershipCleared() bool {
+	return m.clearedteam_membership
+}
+
+// TeamMembershipID returns the "team_membership" edge ID in the mutation.
+func (m *UserMutation) TeamMembershipID() (id int64, exists bool) {
+	if m.team_membership != nil {
+		return *m.team_membership, true
+	}
+	return
+}
+
+// TeamMembershipIDs returns the "team_membership" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// TeamMembershipID instead. It exists only for internal usage by the builders.
+func (m *UserMutation) TeamMembershipIDs() (ids []int64) {
+	if id := m.team_membership; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetTeamMembership resets all changes to the "team_membership" edge.
+func (m *UserMutation) ResetTeamMembership() {
+	m.team_membership = nil
+	m.clearedteam_membership = false
+}
+
 // Where appends a list predicates to the UserMutation builder.
 func (m *UserMutation) Where(ps ...predicate.User) {
 	m.predicates = append(m.predicates, ps...)
@@ -49724,7 +52731,7 @@ func (m *UserMutation) ResetField(name string) error {
 
 // AddedEdges returns all edge names that were set/added in this mutation.
 func (m *UserMutation) AddedEdges() []string {
-	edges := make([]string, 0, 13)
+	edges := make([]string, 0, 15)
 	if m.api_keys != nil {
 		edges = append(edges, user.EdgeAPIKeys)
 	}
@@ -49763,6 +52770,12 @@ func (m *UserMutation) AddedEdges() []string {
 	}
 	if m.platform_quotas != nil {
 		edges = append(edges, user.EdgePlatformQuotas)
+	}
+	if m.owned_team != nil {
+		edges = append(edges, user.EdgeOwnedTeam)
+	}
+	if m.team_membership != nil {
+		edges = append(edges, user.EdgeTeamMembership)
 	}
 	return edges
 }
@@ -49849,13 +52862,21 @@ func (m *UserMutation) AddedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
+	case user.EdgeOwnedTeam:
+		if id := m.owned_team; id != nil {
+			return []ent.Value{*id}
+		}
+	case user.EdgeTeamMembership:
+		if id := m.team_membership; id != nil {
+			return []ent.Value{*id}
+		}
 	}
 	return nil
 }
 
 // RemovedEdges returns all edge names that were removed in this mutation.
 func (m *UserMutation) RemovedEdges() []string {
-	edges := make([]string, 0, 13)
+	edges := make([]string, 0, 15)
 	if m.removedapi_keys != nil {
 		edges = append(edges, user.EdgeAPIKeys)
 	}
@@ -49986,7 +53007,7 @@ func (m *UserMutation) RemovedIDs(name string) []ent.Value {
 
 // ClearedEdges returns all edge names that were cleared in this mutation.
 func (m *UserMutation) ClearedEdges() []string {
-	edges := make([]string, 0, 13)
+	edges := make([]string, 0, 15)
 	if m.clearedapi_keys {
 		edges = append(edges, user.EdgeAPIKeys)
 	}
@@ -50026,6 +53047,12 @@ func (m *UserMutation) ClearedEdges() []string {
 	if m.clearedplatform_quotas {
 		edges = append(edges, user.EdgePlatformQuotas)
 	}
+	if m.clearedowned_team {
+		edges = append(edges, user.EdgeOwnedTeam)
+	}
+	if m.clearedteam_membership {
+		edges = append(edges, user.EdgeTeamMembership)
+	}
 	return edges
 }
 
@@ -50059,6 +53086,10 @@ func (m *UserMutation) EdgeCleared(name string) bool {
 		return m.clearedpending_auth_sessions
 	case user.EdgePlatformQuotas:
 		return m.clearedplatform_quotas
+	case user.EdgeOwnedTeam:
+		return m.clearedowned_team
+	case user.EdgeTeamMembership:
+		return m.clearedteam_membership
 	}
 	return false
 }
@@ -50067,6 +53098,12 @@ func (m *UserMutation) EdgeCleared(name string) bool {
 // if that edge is not defined in the schema.
 func (m *UserMutation) ClearEdge(name string) error {
 	switch name {
+	case user.EdgeOwnedTeam:
+		m.ClearOwnedTeam()
+		return nil
+	case user.EdgeTeamMembership:
+		m.ClearTeamMembership()
+		return nil
 	}
 	return fmt.Errorf("unknown User unique edge %s", name)
 }
@@ -50113,6 +53150,12 @@ func (m *UserMutation) ResetEdge(name string) error {
 		return nil
 	case user.EdgePlatformQuotas:
 		m.ResetPlatformQuotas()
+		return nil
+	case user.EdgeOwnedTeam:
+		m.ResetOwnedTeam()
+		return nil
+	case user.EdgeTeamMembership:
+		m.ResetTeamMembership()
 		return nil
 	}
 	return fmt.Errorf("unknown User edge %s", name)

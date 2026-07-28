@@ -1684,6 +1684,52 @@ func HasPlatformQuotasWith(preds ...predicate.UserPlatformQuota) predicate.User 
 	})
 }
 
+// HasOwnedTeam applies the HasEdge predicate on the "owned_team" edge.
+func HasOwnedTeam() predicate.User {
+	return predicate.User(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2O, false, OwnedTeamTable, OwnedTeamColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasOwnedTeamWith applies the HasEdge predicate on the "owned_team" edge with a given conditions (other predicates).
+func HasOwnedTeamWith(preds ...predicate.Team) predicate.User {
+	return predicate.User(func(s *sql.Selector) {
+		step := newOwnedTeamStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
+// HasTeamMembership applies the HasEdge predicate on the "team_membership" edge.
+func HasTeamMembership() predicate.User {
+	return predicate.User(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2O, false, TeamMembershipTable, TeamMembershipColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasTeamMembershipWith applies the HasEdge predicate on the "team_membership" edge with a given conditions (other predicates).
+func HasTeamMembershipWith(preds ...predicate.TeamMembership) predicate.User {
+	return predicate.User(func(s *sql.Selector) {
+		step := newTeamMembershipStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
 // HasUserAllowedGroups applies the HasEdge predicate on the "user_allowed_groups" edge.
 func HasUserAllowedGroups() predicate.User {
 	return predicate.User(func(s *sql.Selector) {

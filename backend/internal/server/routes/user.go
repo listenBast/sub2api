@@ -32,7 +32,7 @@ func RegisterUserRoutes(
 			user.PUT("/password", h.User.ChangePassword)
 			user.PUT("", h.User.UpdateProfile)
 			user.GET("/aff", h.User.GetAffiliate)
-			user.POST("/aff/transfer", h.User.TransferAffiliateQuota)
+			user.POST("/aff/transfer", h.Team.RequireIndependentAccount, h.User.TransferAffiliateQuota)
 			user.POST("/account-bindings/email/send-code", h.User.SendEmailBindingCode)
 			user.POST("/account-bindings/email", h.User.BindEmailIdentity)
 			user.DELETE("/account-bindings/:provider", h.User.UnbindIdentity)
@@ -61,6 +61,25 @@ func RegisterUserRoutes(
 				// 敏感操作二次验证：授予当前会话一段时间的 step-up 权限
 				totp.POST("/step-up", h.Totp.StepUp)
 			}
+		}
+
+		team := authenticated.Group("/team")
+		{
+			team.GET("", h.Team.GetContext)
+			team.POST("/upgrade", h.Team.Upgrade)
+			team.PUT("", h.Team.Rename)
+			team.DELETE("", h.Team.Dissolve)
+			team.POST("/invitations", h.Team.Invite)
+			team.POST("/invitations/respond", h.Team.RespondInvitation)
+			team.POST("/exit", h.Team.RequestExit)
+			team.GET("/dashboard", h.Team.Dashboard)
+			team.GET("/usage", h.Team.ListUsage)
+			team.GET("/transactions", h.Team.ListTransactions)
+			team.POST("/members/:id/balance", h.Team.AllocateBalance)
+			team.PATCH("/members/:id/remark", h.Team.UpdateMemberRemark)
+			team.PATCH("/members/:id/limits", h.Team.UpdateMemberLimits)
+			team.POST("/members/:id/exit-review", h.Team.ReviewExit)
+			team.DELETE("/members/:id", h.Team.RemoveMember)
 		}
 
 		// API Key管理
@@ -113,7 +132,7 @@ func RegisterUserRoutes(
 		// 卡密兑换
 		redeem := authenticated.Group("/redeem")
 		{
-			redeem.POST("", h.Redeem.Redeem)
+			redeem.POST("", h.Team.RequireIndependentAccount, h.Redeem.Redeem)
 			redeem.GET("/history", h.Redeem.GetHistory)
 		}
 

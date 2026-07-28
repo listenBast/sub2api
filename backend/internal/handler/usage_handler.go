@@ -50,6 +50,7 @@ type UsageHandler struct {
 	apiKeyService  *service.APIKeyService
 	opsService     *service.OpsService
 	settingService *service.SettingService
+	teamService    *service.TeamService
 }
 
 // NewUsageHandler creates a new UsageHandler
@@ -58,19 +59,60 @@ func NewUsageHandler(
 	apiKeyService *service.APIKeyService,
 	opsService *service.OpsService,
 	settingService *service.SettingService,
+	teamService *service.TeamService,
 ) *UsageHandler {
 	return &UsageHandler{
 		usageService:   usageService,
 		apiKeyService:  apiKeyService,
 		opsService:     opsService,
 		settingService: settingService,
+		teamService:    teamService,
 	}
+}
+
+func (h *UsageHandler) resolveUsageUserIDs(c *gin.Context, userID, memberID int64) ([]int64, bool) {
+	if h.teamService == nil {
+		if memberID > 0 && memberID != userID {
+			response.Forbidden(c, "Not authorized to access this member's usage records")
+			return nil, false
+		}
+		return []int64{userID}, true
+	}
+	userIDs, err := h.teamService.ResolveUsageUserIDs(c.Request.Context(), userID, memberID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return nil, false
+	}
+	return userIDs, true
+}
+
+func containsUserID(userIDs []int64, userID int64) bool {
+	for _, candidate := range userIDs {
+		if candidate == userID {
+			return true
+		}
+	}
+	return false
 }
 
 func (h *UsageHandler) parseUserUsageFilters(c *gin.Context, requireRange bool) (*userUsageFilters, bool) {
 	subject, ok := middleware2.GetAuthSubjectFromContext(c)
 	if !ok {
 		response.Unauthorized(c, "User not authenticated")
+		return nil, false
+	}
+
+	var memberID int64
+	if memberIDStr := strings.TrimSpace(c.Query("member_id")); memberIDStr != "" {
+		id, err := strconv.ParseInt(memberIDStr, 10, 64)
+		if err != nil || id <= 0 {
+			response.BadRequest(c, "Invalid member_id")
+			return nil, false
+		}
+		memberID = id
+	}
+	usageUserIDs, ok := h.resolveUsageUserIDs(c, subject.UserID, memberID)
+	if !ok {
 		return nil, false
 	}
 
@@ -90,7 +132,7 @@ func (h *UsageHandler) parseUserUsageFilters(c *gin.Context, requireRange bool) 
 			response.ErrorFrom(c, err)
 			return nil, false
 		}
-		if apiKey.UserID != subject.UserID {
+		if !containsUserID(usageUserIDs, apiKey.UserID) {
 			response.Forbidden(c, "Not authorized to access this API key's usage records")
 			return nil, false
 		}
@@ -193,9 +235,18 @@ func (h *UsageHandler) parseUserUsageFilters(c *gin.Context, requireRange bool) 
 		}
 	}
 
+	var scopedUserID int64
+	var scopedUserIDs []int64
+	if len(usageUserIDs) == 1 {
+		scopedUserID = usageUserIDs[0]
+	} else {
+		scopedUserIDs = usageUserIDs
+	}
+
 	return &userUsageFilters{
 		Filters: usagestats.UsageLogFilters{
-			UserID:            subject.UserID,
+			UserID:            scopedUserID,
+			UserIDs:           scopedUserIDs,
 			APIKeyID:          apiKeyID,
 			GroupID:           groupID,
 			Model:             strings.TrimSpace(c.Query("model")),
@@ -444,7 +495,11 @@ func (h *UsageHandler) DashboardStats(c *gin.Context) {
 		return
 	}
 
-	stats, err := h.usageService.GetUserDashboardStats(c.Request.Context(), subject.UserID)
+	userIDs, ok := h.resolveUsageUserIDs(c, subject.UserID, 0)
+	if !ok {
+		return
+	}
+	stats, err := h.usageService.GetUsersDashboardStats(c.Request.Context(), userIDs)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return

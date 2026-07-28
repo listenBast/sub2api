@@ -197,6 +197,8 @@ export default {
     contentModeration: 'Content Moderation',
     promptAudit: 'Prompt Audit',
     auditLogs: 'Audit Logs',
+    team: 'Team Center',
+    teams: 'Teams',
   },
 
   // Auth

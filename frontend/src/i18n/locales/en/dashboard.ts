@@ -629,6 +629,8 @@ export default {
     securityDescription: 'Password, two-factor authentication, and alerts live in the right rail.',
     administrator: 'Administrator',
     user: 'User',
+    team: 'Team',
+    teamMember: 'Team Member',
     username: 'Username',
     email: 'Email',
     status: 'Status',

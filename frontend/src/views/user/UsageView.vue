@@ -95,6 +95,10 @@
             </div>
           </div>
           <div v-else class="flex flex-1 flex-wrap items-end gap-4">
+            <div v-if="teamStore.isOwner" class="w-full sm:w-auto sm:min-w-[220px]">
+              <label class="input-label">{{ t('team.members') }}</label>
+              <Select v-model="filters.member_id" :options="teamMemberOptions" @change="applyFilters" />
+            </div>
             <div class="w-full sm:w-auto sm:min-w-[220px]">
               <label class="input-label">{{ t('usage.apiKeyFilter') }}</label>
               <Select v-model="filters.api_key_id" :options="apiKeyOptions" @change="applyFilters" />
@@ -216,6 +220,7 @@
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
+import { useTeamStore } from '@/stores/team'
 import { keysAPI, usageAPI, userGroupsAPI } from '@/api'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import Pagination from '@/components/common/Pagination.vue'
@@ -250,6 +255,7 @@ import { COMMON_ERROR_STATUS_CODES } from '@/utils/errorBadges'
 
 const { t } = useI18n()
 const appStore = useAppStore()
+const teamStore = useTeamStore()
 
 type DistributionMetric = 'tokens' | 'actual_cost'
 type EndpointSource = 'inbound' | 'upstream' | 'path'
@@ -354,6 +360,7 @@ const errorViewEnabled = computed(() => appStore.cachedPublicSettings?.allow_use
 const filters = ref<UsageQueryParams>({
   start_date: startDate.value,
   end_date: endDate.value,
+  member_id: null,
   request_type: undefined,
   billing_type: null,
   billing_mode: null,
@@ -409,6 +416,21 @@ const modelOptions = computed<SelectOption[]>(() => [
   { value: null, label: t('admin.usage.allModels') },
   ...modelOptionValues.value.map((model) => ({ value: model, label: model })),
 ])
+const teamMemberOptions = computed<SelectOption[]>(() => {
+  const team = teamStore.context?.team
+  if (!teamStore.isOwner || !team) return []
+
+  const options: SelectOption[] = [
+    { value: null, label: t('team.filterMember') },
+    { value: team.owner.user_id, label: team.owner.username || team.owner.email },
+  ]
+  for (const member of team.members) {
+    if (member.status === 'active' || member.status === 'exit_pending') {
+      options.push({ value: member.user_id, label: member.remark?.trim() || member.username || member.email })
+    }
+  }
+  return options
+})
 
 const normalizedFilters = computed<UsageQueryParams>(() => {
   const requestType = filters.value.request_type
@@ -553,6 +575,7 @@ const resetFilters = () => {
     request_type: undefined,
     billing_type: null,
     billing_mode: null,
+    member_id: null,
   }
   granularity.value = getGranularityForRange(range.start, range.end)
   applyFilters()
@@ -873,10 +896,16 @@ const switchToErrors = () => {
   if (errorRows.value.length === 0) void loadErrors()
 }
 
-onMounted(() => {
+onMounted(async () => {
+  document.addEventListener('click', handleColumnClickOutside)
+  try {
+    await teamStore.fetchContext(true)
+  } catch (error) {
+    console.error('[UsageView] failed to resolve team mode:', error)
+  }
+
   loadSavedColumns()
   loadSavedErrColumns()
-  document.addEventListener('click', handleColumnClickOutside)
   void loadFilterOptions()
   refreshData()
 })

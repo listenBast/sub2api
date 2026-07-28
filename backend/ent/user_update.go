@@ -20,6 +20,8 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/predicate"
 	"github.com/Wei-Shaw/sub2api/ent/promocodeusage"
 	"github.com/Wei-Shaw/sub2api/ent/redeemcode"
+	"github.com/Wei-Shaw/sub2api/ent/team"
+	"github.com/Wei-Shaw/sub2api/ent/teammembership"
 	"github.com/Wei-Shaw/sub2api/ent/usagelog"
 	"github.com/Wei-Shaw/sub2api/ent/user"
 	"github.com/Wei-Shaw/sub2api/ent/userattributevalue"
@@ -627,6 +629,44 @@ func (_u *UserUpdate) AddPlatformQuotas(v ...*UserPlatformQuota) *UserUpdate {
 	return _u.AddPlatformQuotaIDs(ids...)
 }
 
+// SetOwnedTeamID sets the "owned_team" edge to the Team entity by ID.
+func (_u *UserUpdate) SetOwnedTeamID(id int64) *UserUpdate {
+	_u.mutation.SetOwnedTeamID(id)
+	return _u
+}
+
+// SetNillableOwnedTeamID sets the "owned_team" edge to the Team entity by ID if the given value is not nil.
+func (_u *UserUpdate) SetNillableOwnedTeamID(id *int64) *UserUpdate {
+	if id != nil {
+		_u = _u.SetOwnedTeamID(*id)
+	}
+	return _u
+}
+
+// SetOwnedTeam sets the "owned_team" edge to the Team entity.
+func (_u *UserUpdate) SetOwnedTeam(v *Team) *UserUpdate {
+	return _u.SetOwnedTeamID(v.ID)
+}
+
+// SetTeamMembershipID sets the "team_membership" edge to the TeamMembership entity by ID.
+func (_u *UserUpdate) SetTeamMembershipID(id int64) *UserUpdate {
+	_u.mutation.SetTeamMembershipID(id)
+	return _u
+}
+
+// SetNillableTeamMembershipID sets the "team_membership" edge to the TeamMembership entity by ID if the given value is not nil.
+func (_u *UserUpdate) SetNillableTeamMembershipID(id *int64) *UserUpdate {
+	if id != nil {
+		_u = _u.SetTeamMembershipID(*id)
+	}
+	return _u
+}
+
+// SetTeamMembership sets the "team_membership" edge to the TeamMembership entity.
+func (_u *UserUpdate) SetTeamMembership(v *TeamMembership) *UserUpdate {
+	return _u.SetTeamMembershipID(v.ID)
+}
+
 // Mutation returns the UserMutation object of the builder.
 func (_u *UserUpdate) Mutation() *UserMutation {
 	return _u.mutation
@@ -903,6 +943,18 @@ func (_u *UserUpdate) RemovePlatformQuotas(v ...*UserPlatformQuota) *UserUpdate 
 		ids[i] = v[i].ID
 	}
 	return _u.RemovePlatformQuotaIDs(ids...)
+}
+
+// ClearOwnedTeam clears the "owned_team" edge to the Team entity.
+func (_u *UserUpdate) ClearOwnedTeam() *UserUpdate {
+	_u.mutation.ClearOwnedTeam()
+	return _u
+}
+
+// ClearTeamMembership clears the "team_membership" edge to the TeamMembership entity.
+func (_u *UserUpdate) ClearTeamMembership() *UserUpdate {
+	_u.mutation.ClearTeamMembership()
+	return _u
 }
 
 // Save executes the query and returns the number of nodes affected by the update operation.
@@ -1696,6 +1748,64 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	if _u.mutation.OwnedTeamCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2O,
+			Inverse: false,
+			Table:   user.OwnedTeamTable,
+			Columns: []string{user.OwnedTeamColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(team.FieldID, field.TypeInt64),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.OwnedTeamIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2O,
+			Inverse: false,
+			Table:   user.OwnedTeamTable,
+			Columns: []string{user.OwnedTeamColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(team.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.TeamMembershipCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2O,
+			Inverse: false,
+			Table:   user.TeamMembershipTable,
+			Columns: []string{user.TeamMembershipColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(teammembership.FieldID, field.TypeInt64),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.TeamMembershipIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2O,
+			Inverse: false,
+			Table:   user.TeamMembershipTable,
+			Columns: []string{user.TeamMembershipColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(teammembership.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{user.Label}
@@ -2303,6 +2413,44 @@ func (_u *UserUpdateOne) AddPlatformQuotas(v ...*UserPlatformQuota) *UserUpdateO
 	return _u.AddPlatformQuotaIDs(ids...)
 }
 
+// SetOwnedTeamID sets the "owned_team" edge to the Team entity by ID.
+func (_u *UserUpdateOne) SetOwnedTeamID(id int64) *UserUpdateOne {
+	_u.mutation.SetOwnedTeamID(id)
+	return _u
+}
+
+// SetNillableOwnedTeamID sets the "owned_team" edge to the Team entity by ID if the given value is not nil.
+func (_u *UserUpdateOne) SetNillableOwnedTeamID(id *int64) *UserUpdateOne {
+	if id != nil {
+		_u = _u.SetOwnedTeamID(*id)
+	}
+	return _u
+}
+
+// SetOwnedTeam sets the "owned_team" edge to the Team entity.
+func (_u *UserUpdateOne) SetOwnedTeam(v *Team) *UserUpdateOne {
+	return _u.SetOwnedTeamID(v.ID)
+}
+
+// SetTeamMembershipID sets the "team_membership" edge to the TeamMembership entity by ID.
+func (_u *UserUpdateOne) SetTeamMembershipID(id int64) *UserUpdateOne {
+	_u.mutation.SetTeamMembershipID(id)
+	return _u
+}
+
+// SetNillableTeamMembershipID sets the "team_membership" edge to the TeamMembership entity by ID if the given value is not nil.
+func (_u *UserUpdateOne) SetNillableTeamMembershipID(id *int64) *UserUpdateOne {
+	if id != nil {
+		_u = _u.SetTeamMembershipID(*id)
+	}
+	return _u
+}
+
+// SetTeamMembership sets the "team_membership" edge to the TeamMembership entity.
+func (_u *UserUpdateOne) SetTeamMembership(v *TeamMembership) *UserUpdateOne {
+	return _u.SetTeamMembershipID(v.ID)
+}
+
 // Mutation returns the UserMutation object of the builder.
 func (_u *UserUpdateOne) Mutation() *UserMutation {
 	return _u.mutation
@@ -2579,6 +2727,18 @@ func (_u *UserUpdateOne) RemovePlatformQuotas(v ...*UserPlatformQuota) *UserUpda
 		ids[i] = v[i].ID
 	}
 	return _u.RemovePlatformQuotaIDs(ids...)
+}
+
+// ClearOwnedTeam clears the "owned_team" edge to the Team entity.
+func (_u *UserUpdateOne) ClearOwnedTeam() *UserUpdateOne {
+	_u.mutation.ClearOwnedTeam()
+	return _u
+}
+
+// ClearTeamMembership clears the "team_membership" edge to the TeamMembership entity.
+func (_u *UserUpdateOne) ClearTeamMembership() *UserUpdateOne {
+	_u.mutation.ClearTeamMembership()
+	return _u
 }
 
 // Where appends a list predicates to the UserUpdate builder.
@@ -3395,6 +3555,64 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(userplatformquota.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.OwnedTeamCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2O,
+			Inverse: false,
+			Table:   user.OwnedTeamTable,
+			Columns: []string{user.OwnedTeamColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(team.FieldID, field.TypeInt64),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.OwnedTeamIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2O,
+			Inverse: false,
+			Table:   user.OwnedTeamTable,
+			Columns: []string{user.OwnedTeamColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(team.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.TeamMembershipCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2O,
+			Inverse: false,
+			Table:   user.TeamMembershipTable,
+			Columns: []string{user.TeamMembershipColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(teammembership.FieldID, field.TypeInt64),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.TeamMembershipIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2O,
+			Inverse: false,
+			Table:   user.TeamMembershipTable,
+			Columns: []string{user.TeamMembershipColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(teammembership.FieldID, field.TypeInt64),
 			},
 		}
 		for _, k := range nodes {

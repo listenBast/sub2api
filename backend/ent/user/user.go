@@ -89,6 +89,10 @@ const (
 	EdgePendingAuthSessions = "pending_auth_sessions"
 	// EdgePlatformQuotas holds the string denoting the platform_quotas edge name in mutations.
 	EdgePlatformQuotas = "platform_quotas"
+	// EdgeOwnedTeam holds the string denoting the owned_team edge name in mutations.
+	EdgeOwnedTeam = "owned_team"
+	// EdgeTeamMembership holds the string denoting the team_membership edge name in mutations.
+	EdgeTeamMembership = "team_membership"
 	// EdgeUserAllowedGroups holds the string denoting the user_allowed_groups edge name in mutations.
 	EdgeUserAllowedGroups = "user_allowed_groups"
 	// Table holds the table name of the user in the database.
@@ -182,6 +186,20 @@ const (
 	PlatformQuotasInverseTable = "user_platform_quotas"
 	// PlatformQuotasColumn is the table column denoting the platform_quotas relation/edge.
 	PlatformQuotasColumn = "user_id"
+	// OwnedTeamTable is the table that holds the owned_team relation/edge.
+	OwnedTeamTable = "teams"
+	// OwnedTeamInverseTable is the table name for the Team entity.
+	// It exists in this package in order to avoid circular dependency with the "team" package.
+	OwnedTeamInverseTable = "teams"
+	// OwnedTeamColumn is the table column denoting the owned_team relation/edge.
+	OwnedTeamColumn = "owner_id"
+	// TeamMembershipTable is the table that holds the team_membership relation/edge.
+	TeamMembershipTable = "team_memberships"
+	// TeamMembershipInverseTable is the table name for the TeamMembership entity.
+	// It exists in this package in order to avoid circular dependency with the "teammembership" package.
+	TeamMembershipInverseTable = "team_memberships"
+	// TeamMembershipColumn is the table column denoting the team_membership relation/edge.
+	TeamMembershipColumn = "user_id"
 	// UserAllowedGroupsTable is the table that holds the user_allowed_groups relation/edge.
 	UserAllowedGroupsTable = "user_allowed_groups"
 	// UserAllowedGroupsInverseTable is the table name for the UserAllowedGroup entity.
@@ -602,6 +620,20 @@ func ByPlatformQuotas(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 	}
 }
 
+// ByOwnedTeamField orders the results by owned_team field.
+func ByOwnedTeamField(field string, opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newOwnedTeamStep(), sql.OrderByField(field, opts...))
+	}
+}
+
+// ByTeamMembershipField orders the results by team_membership field.
+func ByTeamMembershipField(field string, opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newTeamMembershipStep(), sql.OrderByField(field, opts...))
+	}
+}
+
 // ByUserAllowedGroupsCount orders the results by user_allowed_groups count.
 func ByUserAllowedGroupsCount(opts ...sql.OrderTermOption) OrderOption {
 	return func(s *sql.Selector) {
@@ -704,6 +736,20 @@ func newPlatformQuotasStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(PlatformQuotasInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.O2M, false, PlatformQuotasTable, PlatformQuotasColumn),
+	)
+}
+func newOwnedTeamStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(OwnedTeamInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2O, false, OwnedTeamTable, OwnedTeamColumn),
+	)
+}
+func newTeamMembershipStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(TeamMembershipInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2O, false, TeamMembershipTable, TeamMembershipColumn),
 	)
 }
 func newUserAllowedGroupsStep() *sqlgraph.Step {

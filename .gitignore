@@ -143,3 +143,8 @@ docs/*
 frontend/coverage/
 aicodex
 output/
+.playwright-cli/
+README_TEAM_MODE_HANDOFF.md
+deploy/docker-compose.preview.yml
+deploy/preview.pid
+deploy/start-preview.ps1

@@ -298,6 +298,92 @@ func (s *UsageService) GetUserDashboardStats(ctx context.Context, userID int64) 
 	return stats, nil
 }
 
+// GetUsersDashboardStats returns the normal user dashboard shape for a multi-user scope.
+func (s *UsageService) GetUsersDashboardStats(ctx context.Context, userIDs []int64) (*usagestats.UserDashboardStats, error) {
+	uniqueIDs := make([]int64, 0, len(userIDs))
+	seen := make(map[int64]struct{}, len(userIDs))
+	for _, userID := range userIDs {
+		if userID <= 0 {
+			continue
+		}
+		if _, exists := seen[userID]; exists {
+			continue
+		}
+		seen[userID] = struct{}{}
+		uniqueIDs = append(uniqueIDs, userID)
+	}
+	if len(uniqueIDs) == 0 {
+		return &usagestats.UserDashboardStats{}, nil
+	}
+	if len(uniqueIDs) == 1 {
+		return s.GetUserDashboardStats(ctx, uniqueIDs[0])
+	}
+
+	type usersDashboardStatsRepo interface {
+		GetUsersDashboardStats(ctx context.Context, userIDs []int64) (*usagestats.UserDashboardStats, error)
+	}
+	if repo, ok := s.usageRepo.(usersDashboardStatsRepo); ok {
+		stats, err := repo.GetUsersDashboardStats(ctx, uniqueIDs)
+		if err != nil {
+			return nil, fmt.Errorf("get users dashboard stats: %w", err)
+		}
+		return stats, nil
+	}
+
+	result := &usagestats.UserDashboardStats{}
+	platforms := make(map[string]*usagestats.PlatformDashboardStats)
+	platformOrder := make([]string, 0)
+	var weightedDuration float64
+	for _, userID := range uniqueIDs {
+		stats, err := s.GetUserDashboardStats(ctx, userID)
+		if err != nil {
+			return nil, err
+		}
+		result.TotalAPIKeys += stats.TotalAPIKeys
+		result.ActiveAPIKeys += stats.ActiveAPIKeys
+		result.TotalRequests += stats.TotalRequests
+		result.TotalInputTokens += stats.TotalInputTokens
+		result.TotalOutputTokens += stats.TotalOutputTokens
+		result.TotalCacheCreationTokens += stats.TotalCacheCreationTokens
+		result.TotalCacheReadTokens += stats.TotalCacheReadTokens
+		result.TotalTokens += stats.TotalTokens
+		result.TotalCost += stats.TotalCost
+		result.TotalActualCost += stats.TotalActualCost
+		result.TodayRequests += stats.TodayRequests
+		result.TodayInputTokens += stats.TodayInputTokens
+		result.TodayOutputTokens += stats.TodayOutputTokens
+		result.TodayCacheCreationTokens += stats.TodayCacheCreationTokens
+		result.TodayCacheReadTokens += stats.TodayCacheReadTokens
+		result.TodayTokens += stats.TodayTokens
+		result.TodayCost += stats.TodayCost
+		result.TodayActualCost += stats.TodayActualCost
+		result.Rpm += stats.Rpm
+		result.Tpm += stats.Tpm
+		weightedDuration += stats.AverageDurationMs * float64(stats.TotalRequests)
+		for _, platform := range stats.ByPlatform {
+			merged, exists := platforms[platform.Platform]
+			if !exists {
+				merged = &usagestats.PlatformDashboardStats{Platform: platform.Platform}
+				platforms[platform.Platform] = merged
+				platformOrder = append(platformOrder, platform.Platform)
+			}
+			merged.TotalRequests += platform.TotalRequests
+			merged.TotalTokens += platform.TotalTokens
+			merged.TotalActualCost += platform.TotalActualCost
+			merged.TodayRequests += platform.TodayRequests
+			merged.TodayTokens += platform.TodayTokens
+			merged.TodayActualCost += platform.TodayActualCost
+		}
+	}
+	if result.TotalRequests > 0 {
+		result.AverageDurationMs = weightedDuration / float64(result.TotalRequests)
+	}
+	for _, platform := range platformOrder {
+		result.ByPlatform = append(result.ByPlatform, *platforms[platform])
+	}
+	return result, nil
+}
+
 // GetAPIKeyDashboardStats returns dashboard summary stats filtered by API Key.
 func (s *UsageService) GetAPIKeyDashboardStats(ctx context.Context, apiKeyID int64) (*usagestats.UserDashboardStats, error) {
 	stats, err := s.usageRepo.GetAPIKeyDashboardStats(ctx, apiKeyID)

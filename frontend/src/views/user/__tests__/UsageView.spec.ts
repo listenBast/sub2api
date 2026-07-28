@@ -14,6 +14,7 @@ const {
   showWarning,
   showSuccess,
   showInfo,
+  teamStore,
 } = vi.hoisted(() => ({
   query: vi.fn(),
   getStats: vi.fn(),
@@ -25,6 +26,11 @@ const {
   showWarning: vi.fn(),
   showSuccess: vi.fn(),
   showInfo: vi.fn(),
+  teamStore: {
+    isOwner: false,
+    context: null as any,
+    fetchContext: vi.fn(),
+  },
 }))
 
 const messages: Record<string, string> = {
@@ -60,6 +66,8 @@ const messages: Record<string, string> = {
   'usage.preparingExport': 'Preparing export',
   'usage.exportSuccess': 'Export success',
   'usage.exportFailed': 'Export failed',
+  'team.members': 'Members',
+  'team.filterMember': 'All members',
   'common.refresh': 'Refresh',
   'common.reset': 'Reset',
 }
@@ -81,6 +89,10 @@ vi.mock('@/api', () => ({
 
 vi.mock('@/stores/app', () => ({
   useAppStore: () => ({ showError, showWarning, showSuccess, showInfo }),
+}))
+
+vi.mock('@/stores/team', () => ({
+  useTeamStore: () => teamStore,
 }))
 
 vi.mock('vue-i18n', async () => {
@@ -159,6 +171,10 @@ describe('user UsageView', () => {
     showWarning.mockReset()
     showSuccess.mockReset()
     showInfo.mockReset()
+    teamStore.isOwner = false
+    teamStore.context = null
+    teamStore.fetchContext.mockReset()
+    teamStore.fetchContext.mockResolvedValue({ role: 'individual' })
 
     query.mockResolvedValue({ items: [usageLog], total: 1, pages: 1 })
     getStats.mockResolvedValue({
@@ -205,6 +221,38 @@ describe('user UsageView', () => {
     }))
     expect(list).toHaveBeenCalledWith(1, 100)
     expect(getAvailable).toHaveBeenCalled()
+  })
+
+  it('keeps the original usage page for an owner and applies the member filter', async () => {
+    teamStore.isOwner = true
+    teamStore.context = {
+      role: 'owner',
+      team: {
+        owner: { user_id: 101, username: 'Owner', email: 'owner@example.com' },
+        members: [
+          { user_id: 202, username: 'Member', email: 'member@example.com', status: 'active' },
+          { user_id: 303, username: 'Invited', email: 'invited@example.com', status: 'invited' },
+        ],
+      },
+    }
+
+    const wrapper = mountUsageView()
+    await flushPromises()
+
+    expect(teamStore.fetchContext).toHaveBeenCalledWith(true)
+    expect(wrapper.text()).toContain('Members')
+    expect(query).toHaveBeenCalled()
+    expect(getStats).toHaveBeenCalled()
+    expect(getDashboardModels).toHaveBeenCalled()
+    expect(getDashboardSnapshotV2).toHaveBeenCalled()
+    expect(list).toHaveBeenCalledWith(1, 100)
+    expect(getAvailable).toHaveBeenCalled()
+
+    ;(wrapper.vm as any).filters.member_id = 202
+    ;(wrapper.vm as any).applyFilters()
+    await flushPromises()
+
+    expect(query).toHaveBeenLastCalledWith(expect.objectContaining({ member_id: 202 }), expect.any(Object))
   })
 
   it('exports csv with current filters and without admin-only fields', async () => {

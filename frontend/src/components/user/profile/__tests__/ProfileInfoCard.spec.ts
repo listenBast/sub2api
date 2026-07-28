@@ -3,6 +3,8 @@ import { describe, expect, it, vi } from 'vitest'
 import ProfileInfoCard from '@/components/user/profile/ProfileInfoCard.vue'
 import type { User } from '@/types'
 
+const { teamRole } = vi.hoisted(() => ({ teamRole: { value: 'individual' } }))
+
 vi.mock('vue-router', () => ({
   useRoute: () => ({
     fullPath: '/profile'
@@ -22,6 +24,14 @@ vi.mock('@/stores/app', () => ({
   })
 }))
 
+vi.mock('@/stores/team', () => ({
+  useTeamStore: () => ({
+    get role() {
+      return teamRole.value
+    }
+  })
+}))
+
 vi.mock('vue-i18n', async (importOriginal) => {
   const actual = await importOriginal<typeof import('vue-i18n')>()
   return {
@@ -33,6 +43,8 @@ vi.mock('vue-i18n', async (importOriginal) => {
         if (key === 'profile.memberSince') return 'Member Since'
         if (key === 'profile.administrator') return 'Administrator'
         if (key === 'profile.user') return 'User'
+        if (key === 'profile.team') return 'Team'
+        if (key === 'profile.teamMember') return 'Team Member'
         if (key === 'profile.authBindings.providers.email') return 'Email'
         if (key === 'profile.authBindings.providers.linuxdo') return 'LinuxDo'
         if (key === 'profile.authBindings.providers.wechat') return 'WeChat'
@@ -109,6 +121,17 @@ describe('ProfileInfoCard', () => {
 
     expect(wrapper.text()).toContain('Avatar synced from LinuxDo')
     expect(wrapper.text()).toContain('Username synced from LinuxDo')
+  })
+
+  it('renders team owner and member identity labels', () => {
+    teamRole.value = 'owner'
+    const owner = mount(ProfileInfoCard, { props: { user: createUser() }, global: { stubs: { Icon: true } } })
+    expect(owner.text()).toContain('Team')
+
+    teamRole.value = 'member'
+    const member = mount(ProfileInfoCard, { props: { user: createUser() }, global: { stubs: { Icon: true } } })
+    expect(member.text()).toContain('Team Member')
+    teamRole.value = 'individual'
   })
 
   it('uses the configured OIDC provider name in source hints', () => {

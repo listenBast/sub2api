@@ -36,6 +36,9 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/securitysecret"
 	"github.com/Wei-Shaw/sub2api/ent/setting"
 	"github.com/Wei-Shaw/sub2api/ent/subscriptionplan"
+	"github.com/Wei-Shaw/sub2api/ent/team"
+	"github.com/Wei-Shaw/sub2api/ent/teammembership"
+	"github.com/Wei-Shaw/sub2api/ent/teamtransaction"
 	"github.com/Wei-Shaw/sub2api/ent/tlsfingerprintprofile"
 	"github.com/Wei-Shaw/sub2api/ent/usagecleanuptask"
 	"github.com/Wei-Shaw/sub2api/ent/usagelog"
@@ -1887,6 +1890,114 @@ func init() {
 	tlsfingerprintprofileDescEnableGrease := tlsfingerprintprofileFields[2].Descriptor()
 	// tlsfingerprintprofile.DefaultEnableGrease holds the default value on creation for the enable_grease field.
 	tlsfingerprintprofile.DefaultEnableGrease = tlsfingerprintprofileDescEnableGrease.Default.(bool)
+	teamMixin := schema.Team{}.Mixin()
+	teamMixinFields0 := teamMixin[0].Fields()
+	_ = teamMixinFields0
+	teamFields := schema.Team{}.Fields()
+	_ = teamFields
+	// teamDescCreatedAt is the schema descriptor for created_at field.
+	teamDescCreatedAt := teamMixinFields0[0].Descriptor()
+	// team.DefaultCreatedAt holds the default value on creation for the created_at field.
+	team.DefaultCreatedAt = teamDescCreatedAt.Default.(func() time.Time)
+	// teamDescUpdatedAt is the schema descriptor for updated_at field.
+	teamDescUpdatedAt := teamMixinFields0[1].Descriptor()
+	// team.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	team.DefaultUpdatedAt = teamDescUpdatedAt.Default.(func() time.Time)
+	// team.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	team.UpdateDefaultUpdatedAt = teamDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// teamDescName is the schema descriptor for name field.
+	teamDescName := teamFields[0].Descriptor()
+	// team.NameValidator is a validator for the "name" field. It is called by the builders before save.
+	team.NameValidator = func() func(string) error {
+		validators := teamDescName.Validators
+		fns := [...]func(string) error{
+			validators[0].(func(string) error),
+			validators[1].(func(string) error),
+		}
+		return func(name string) error {
+			for _, fn := range fns {
+				if err := fn(name); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	// teamDescStatus is the schema descriptor for status field.
+	teamDescStatus := teamFields[2].Descriptor()
+	// team.DefaultStatus holds the default value on creation for the status field.
+	team.DefaultStatus = teamDescStatus.Default.(string)
+	// team.StatusValidator is a validator for the "status" field. It is called by the builders before save.
+	team.StatusValidator = teamDescStatus.Validators[0].(func(string) error)
+	teammembershipMixin := schema.TeamMembership{}.Mixin()
+	teammembershipMixinFields0 := teammembershipMixin[0].Fields()
+	_ = teammembershipMixinFields0
+	teammembershipFields := schema.TeamMembership{}.Fields()
+	_ = teammembershipFields
+	// teammembershipDescCreatedAt is the schema descriptor for created_at field.
+	teammembershipDescCreatedAt := teammembershipMixinFields0[0].Descriptor()
+	// teammembership.DefaultCreatedAt holds the default value on creation for the created_at field.
+	teammembership.DefaultCreatedAt = teammembershipDescCreatedAt.Default.(func() time.Time)
+	// teammembershipDescUpdatedAt is the schema descriptor for updated_at field.
+	teammembershipDescUpdatedAt := teammembershipMixinFields0[1].Descriptor()
+	// teammembership.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	teammembership.DefaultUpdatedAt = teammembershipDescUpdatedAt.Default.(func() time.Time)
+	// teammembership.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	teammembership.UpdateDefaultUpdatedAt = teammembershipDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// teammembershipDescRemark is the schema descriptor for remark field.
+	teammembershipDescRemark := teammembershipFields[3].Descriptor()
+	// teammembership.DefaultRemark holds the default value on creation for the remark field.
+	teammembership.DefaultRemark = teammembershipDescRemark.Default.(string)
+	// teammembership.RemarkValidator is a validator for the "remark" field. It is called by the builders before save.
+	teammembership.RemarkValidator = teammembershipDescRemark.Validators[0].(func(string) error)
+	// teammembershipDescStatus is the schema descriptor for status field.
+	teammembershipDescStatus := teammembershipFields[4].Descriptor()
+	// teammembership.DefaultStatus holds the default value on creation for the status field.
+	teammembership.DefaultStatus = teammembershipDescStatus.Default.(string)
+	// teammembership.StatusValidator is a validator for the "status" field. It is called by the builders before save.
+	teammembership.StatusValidator = teammembershipDescStatus.Validators[0].(func(string) error)
+	teamtransactionFields := schema.TeamTransaction{}.Fields()
+	_ = teamtransactionFields
+	// teamtransactionDescAction is the schema descriptor for action field.
+	teamtransactionDescAction := teamtransactionFields[3].Descriptor()
+	// teamtransaction.ActionValidator is a validator for the "action" field. It is called by the builders before save.
+	teamtransaction.ActionValidator = func() func(string) error {
+		validators := teamtransactionDescAction.Validators
+		fns := [...]func(string) error{
+			validators[0].(func(string) error),
+			validators[1].(func(string) error),
+		}
+		return func(action string) error {
+			for _, fn := range fns {
+				if err := fn(action); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	// teamtransactionDescAmount is the schema descriptor for amount field.
+	teamtransactionDescAmount := teamtransactionFields[4].Descriptor()
+	// teamtransaction.DefaultAmount holds the default value on creation for the amount field.
+	teamtransaction.DefaultAmount = teamtransactionDescAmount.Default.(float64)
+	// teamtransactionDescOwnerBalanceBefore is the schema descriptor for owner_balance_before field.
+	teamtransactionDescOwnerBalanceBefore := teamtransactionFields[5].Descriptor()
+	// teamtransaction.DefaultOwnerBalanceBefore holds the default value on creation for the owner_balance_before field.
+	teamtransaction.DefaultOwnerBalanceBefore = teamtransactionDescOwnerBalanceBefore.Default.(float64)
+	// teamtransactionDescOwnerBalanceAfter is the schema descriptor for owner_balance_after field.
+	teamtransactionDescOwnerBalanceAfter := teamtransactionFields[6].Descriptor()
+	// teamtransaction.DefaultOwnerBalanceAfter holds the default value on creation for the owner_balance_after field.
+	teamtransaction.DefaultOwnerBalanceAfter = teamtransactionDescOwnerBalanceAfter.Default.(float64)
+	// teamtransactionDescNote is the schema descriptor for note field.
+	teamtransactionDescNote := teamtransactionFields[9].Descriptor()
+	// teamtransaction.DefaultNote holds the default value on creation for the note field.
+	teamtransaction.DefaultNote = teamtransactionDescNote.Default.(string)
+	// teamtransaction.NoteValidator is a validator for the "note" field. It is called by the builders before save.
+	teamtransaction.NoteValidator = teamtransactionDescNote.Validators[0].(func(string) error)
+	// teamtransactionDescCreatedAt is the schema descriptor for created_at field.
+	teamtransactionDescCreatedAt := teamtransactionFields[10].Descriptor()
+	// teamtransaction.DefaultCreatedAt holds the default value on creation for the created_at field.
+	teamtransaction.DefaultCreatedAt = teamtransactionDescCreatedAt.Default.(func() time.Time)
 	usagecleanuptaskMixin := schema.UsageCleanupTask{}.Mixin()
 	usagecleanuptaskMixinFields0 := usagecleanuptaskMixin[0].Fields()
 	_ = usagecleanuptaskMixinFields0

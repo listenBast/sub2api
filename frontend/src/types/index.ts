@@ -1979,6 +1979,7 @@ export interface UsageQueryParams {
   page_size?: number
   api_key_id?: number
   user_id?: number
+  member_id?: number | null
   account_id?: number
   group_id?: number
   model?: string

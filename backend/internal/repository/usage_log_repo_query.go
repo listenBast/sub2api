@@ -17,6 +17,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/usagestats"
 	"github.com/Wei-Shaw/sub2api/internal/service"
+	"github.com/lib/pq"
 )
 
 const usageLogSelectColumns = "id, user_id, api_key_id, account_id, request_id, model, requested_model, upstream_model, group_id, subscription_id, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, cache_creation_5m_tokens, cache_creation_1h_tokens, image_output_tokens, image_output_cost, image_input_tokens, image_input_cost, input_cost, output_cost, cache_creation_cost, cache_read_cost, total_cost, actual_cost, rate_multiplier, account_rate_multiplier, billing_type, request_type, stream, openai_ws_mode, duration_ms, first_token_ms, user_agent, ip_address, image_count, image_size, image_input_size, image_output_size, image_size_source, image_size_breakdown, video_count, video_resolution, video_duration_seconds, service_tier, reasoning_effort, inbound_endpoint, upstream_endpoint, cache_ttl_overridden, long_context_billing_applied, channel_id, model_mapping_chain, billing_tier, billing_mode, account_stats_cost, session_id, created_at"
@@ -95,15 +96,33 @@ func (r *usageLogRepository) Delete(ctx context.Context, id int64) error {
 // UsageLogFilters represents filters for usage log queries
 type UsageLogFilters = usagestats.UsageLogFilters
 
+func appendUsageUserWhereCondition(conditions []string, args []any, column string, userID int64, userIDs []int64) ([]string, []any) {
+	if userID > 0 {
+		conditions = append(conditions, fmt.Sprintf("%s = $%d", column, len(args)+1))
+		return conditions, append(args, userID)
+	}
+	userIDs = normalizePositiveInt64IDs(userIDs)
+	if len(userIDs) > 0 {
+		conditions = append(conditions, fmt.Sprintf("%s = ANY($%d)", column, len(args)+1))
+		args = append(args, pq.Array(userIDs))
+	}
+	return conditions, args
+}
+
+func appendUsageUserQueryFilter(query string, args []any, column string, userID int64, userIDs []int64) (string, []any) {
+	conditions, nextArgs := appendUsageUserWhereCondition(nil, args, column, userID, userIDs)
+	if len(conditions) > 0 {
+		query += " AND " + conditions[0]
+	}
+	return query, nextArgs
+}
+
 // ListWithFilters lists usage logs with optional filters (for admin)
 func (r *usageLogRepository) ListWithFilters(ctx context.Context, params pagination.PaginationParams, filters UsageLogFilters) ([]service.UsageLog, *pagination.PaginationResult, error) {
 	conditions := make([]string, 0, 9)
 	args := make([]any, 0, 9)
 
-	if filters.UserID > 0 {
-		conditions = append(conditions, fmt.Sprintf("user_id = $%d", len(args)+1))
-		args = append(args, filters.UserID)
-	}
+	conditions, args = appendUsageUserWhereCondition(conditions, args, "user_id", filters.UserID, filters.UserIDs)
 	if filters.APIKeyID > 0 {
 		conditions = append(conditions, fmt.Sprintf("api_key_id = $%d", len(args)+1))
 		args = append(args, filters.APIKeyID)
@@ -162,7 +181,7 @@ func shouldUseFastUsageLogTotal(filters UsageLogFilters) bool {
 		return false
 	}
 	// 强选择过滤下记录集通常较小，保留精确总数。
-	return filters.UserID == 0 && filters.APIKeyID == 0 && filters.AccountID == 0
+	return filters.UserID == 0 && len(filters.UserIDs) == 0 && filters.APIKeyID == 0 && filters.AccountID == 0
 }
 
 func (r *usageLogRepository) listUsageLogsWithPagination(ctx context.Context, whereClause string, args []any, params pagination.PaginationParams) ([]service.UsageLog, *pagination.PaginationResult, error) {

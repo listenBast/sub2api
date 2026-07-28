@@ -347,6 +347,21 @@ func anySliceToDriverValues(values []any) []driver.Value {
 	return out
 }
 
+func TestAppendUsageUserWhereConditionSupportsTeamScope(t *testing.T) {
+	conditions, args := appendUsageUserWhereCondition(nil, nil, "user_id", 0, []int64{7, 9, 7, 0})
+	require.Equal(t, []string{"user_id = ANY($1)"}, conditions)
+	require.Len(t, args, 1)
+	valuer, ok := args[0].(driver.Valuer)
+	require.True(t, ok)
+	value, err := valuer.Value()
+	require.NoError(t, err)
+	require.Equal(t, "{7,9}", value)
+
+	conditions, args = appendUsageUserWhereCondition(nil, nil, "user_id", 5, []int64{7, 9})
+	require.Equal(t, []string{"user_id = $1"}, conditions)
+	require.Equal(t, []any{int64(5)}, args)
+}
+
 func TestUsageLogRepositoryListWithFiltersRequestTypePriority(t *testing.T) {
 	db, mock := newSQLMock(t)
 	repo := &usageLogRepository{sql: db}

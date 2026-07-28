@@ -9,10 +9,18 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/timezone"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/usagestats"
 	"github.com/Wei-Shaw/sub2api/internal/service"
+	"github.com/lib/pq"
 )
 
 // getPerformanceStats 获取 RPM 和 TPM（近5分钟平均值，可选按用户过滤）
 func (r *usageLogRepository) getPerformanceStats(ctx context.Context, userID int64) (rpm, tpm int64, err error) {
+	if userID > 0 {
+		return r.getPerformanceStatsForUsers(ctx, []int64{userID})
+	}
+	return r.getPerformanceStatsForUsers(ctx, nil)
+}
+
+func (r *usageLogRepository) getPerformanceStatsForUsers(ctx context.Context, userIDs []int64) (rpm, tpm int64, err error) {
 	fiveMinutesAgo := time.Now().Add(-5 * time.Minute)
 	query := `
 		SELECT
@@ -21,9 +29,10 @@ func (r *usageLogRepository) getPerformanceStats(ctx context.Context, userID int
 		FROM usage_logs
 		WHERE created_at >= $1`
 	args := []any{fiveMinutesAgo}
-	if userID > 0 {
-		query += " AND user_id = $2"
-		args = append(args, userID)
+	userIDs = normalizePositiveInt64IDs(userIDs)
+	if len(userIDs) > 0 {
+		query += " AND user_id = ANY($2)"
+		args = append(args, pq.Array(userIDs))
 	}
 
 	var requestCount int64
@@ -379,15 +388,24 @@ type PlatformDashboardStats = usagestats.PlatformDashboardStats
 
 // GetUserDashboardStats 获取用户专属的仪表盘统计
 func (r *usageLogRepository) GetUserDashboardStats(ctx context.Context, userID int64) (*UserDashboardStats, error) {
+	return r.GetUsersDashboardStats(ctx, []int64{userID})
+}
+
+// GetUsersDashboardStats returns the existing user dashboard shape aggregated across users.
+func (r *usageLogRepository) GetUsersDashboardStats(ctx context.Context, userIDs []int64) (*UserDashboardStats, error) {
 	stats := &UserDashboardStats{}
+	userIDs = normalizePositiveInt64IDs(userIDs)
+	if len(userIDs) == 0 {
+		return stats, nil
+	}
 	today := timezone.Today()
 
 	// API Key 统计
 	if err := scanSingleRow(
 		ctx,
 		r.sql,
-		"SELECT COUNT(*) FROM api_keys WHERE user_id = $1 AND deleted_at IS NULL",
-		[]any{userID},
+		"SELECT COUNT(*) FROM api_keys WHERE user_id = ANY($1) AND deleted_at IS NULL",
+		[]any{pq.Array(userIDs)},
 		&stats.TotalAPIKeys,
 	); err != nil {
 		return nil, err
@@ -395,8 +413,8 @@ func (r *usageLogRepository) GetUserDashboardStats(ctx context.Context, userID i
 	if err := scanSingleRow(
 		ctx,
 		r.sql,
-		"SELECT COUNT(*) FROM api_keys WHERE user_id = $1 AND status = $2 AND deleted_at IS NULL",
-		[]any{userID, service.StatusActive},
+		"SELECT COUNT(*) FROM api_keys WHERE user_id = ANY($1) AND status = $2 AND deleted_at IS NULL",
+		[]any{pq.Array(userIDs), service.StatusActive},
 		&stats.ActiveAPIKeys,
 	); err != nil {
 		return nil, err
@@ -414,13 +432,13 @@ func (r *usageLogRepository) GetUserDashboardStats(ctx context.Context, userID i
 			COALESCE(SUM(actual_cost), 0) as total_actual_cost,
 			COALESCE(AVG(duration_ms), 0) as avg_duration_ms
 		FROM usage_logs
-		WHERE user_id = $1
+		WHERE user_id = ANY($1)
 	`
 	if err := scanSingleRow(
 		ctx,
 		r.sql,
 		totalStatsQuery,
-		[]any{userID},
+		[]any{pq.Array(userIDs)},
 		&stats.TotalRequests,
 		&stats.TotalInputTokens,
 		&stats.TotalOutputTokens,
@@ -445,13 +463,13 @@ func (r *usageLogRepository) GetUserDashboardStats(ctx context.Context, userID i
 			COALESCE(SUM(total_cost), 0) as today_cost,
 			COALESCE(SUM(actual_cost), 0) as today_actual_cost
 		FROM usage_logs
-		WHERE user_id = $1 AND created_at >= $2
+		WHERE user_id = ANY($1) AND created_at >= $2
 	`
 	if err := scanSingleRow(
 		ctx,
 		r.sql,
 		todayStatsQuery,
-		[]any{userID, today},
+		[]any{pq.Array(userIDs), today},
 		&stats.TodayRequests,
 		&stats.TodayInputTokens,
 		&stats.TodayOutputTokens,
@@ -465,7 +483,7 @@ func (r *usageLogRepository) GetUserDashboardStats(ctx context.Context, userID i
 	stats.TodayTokens = stats.TodayInputTokens + stats.TodayOutputTokens + stats.TodayCacheCreationTokens + stats.TodayCacheReadTokens
 
 	// 性能指标：RPM 和 TPM（最近1分钟，仅统计该用户的请求）
-	rpm, tpm, err := r.getPerformanceStats(ctx, userID)
+	rpm, tpm, err := r.getPerformanceStatsForUsers(ctx, userIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -490,13 +508,13 @@ func (r *usageLogRepository) GetUserDashboardStats(ctx context.Context, userID i
 		FROM usage_logs ul
 		LEFT JOIN groups g ON g.id = ul.group_id
 		LEFT JOIN accounts a ON a.id = ul.account_id
-		WHERE ul.user_id = $1
+		WHERE ul.user_id = ANY($1)
 		  AND ` + usageLogSuccessFilterUL + `
 		GROUP BY ` + usageLogEffectivePlatformExpr + `
 		HAVING ` + usageLogEffectivePlatformExpr + ` IS NOT NULL AND ` + usageLogEffectivePlatformExpr + ` <> ''
 		ORDER BY total_actual_cost DESC
 	`
-	rows, err := r.sql.QueryContext(ctx, platformQuery, userID, today)
+	rows, err := r.sql.QueryContext(ctx, platformQuery, pq.Array(userIDs), today)
 	if err != nil {
 		return nil, err
 	}

@@ -1,0 +1,64 @@
+name: Sync upstream
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 2 * * 1'
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  create-sync-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout fork
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Merge upstream into a review branch
+        id: merge
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add upstream https://github.com/Wei-Shaw/sub2api.git
+          git fetch upstream main --tags
+
+          if git merge-base --is-ancestor upstream/main HEAD; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          fork_version="$(tr -d '\r\n' < backend/cmd/server/VERSION)"
+          branch="sync/upstream-$(date -u +%Y%m%d-%H%M%S)"
+          git switch --create "$branch"
+
+          if ! git merge --no-ff --no-commit upstream/main; then
+            echo "::error::上游代码存在合并冲突，请在本地运行 tools/sync-upstream.ps1 处理。"
+            exit 1
+          fi
+
+          printf '%s\n' "$fork_version" > backend/cmd/server/VERSION
+          git add --all
+          git commit -m "merge: sync upstream main"
+          git push --set-upstream origin "$branch"
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+
+      - name: Create pull request
+        if: steps.merge.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SYNC_BRANCH: ${{ steps.merge.outputs.branch }}
+        shell: bash
+        run: |
+          gh pr create \
+            --base main \
+            --head "$SYNC_BRANCH" \
+            --title "同步上游 Wei-Shaw/sub2api" \
+            --body "自动合并上游 main。合并前请重点检查团队模式、余额事务、更新源和 VERSION 文件。" \
+          || echo "::warning::同步分支已推送，但自动创建 PR 失败，请在仓库页面手动创建。"

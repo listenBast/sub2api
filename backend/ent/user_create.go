@@ -19,6 +19,8 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/pendingauthsession"
 	"github.com/Wei-Shaw/sub2api/ent/promocodeusage"
 	"github.com/Wei-Shaw/sub2api/ent/redeemcode"
+	"github.com/Wei-Shaw/sub2api/ent/team"
+	"github.com/Wei-Shaw/sub2api/ent/teammembership"
 	"github.com/Wei-Shaw/sub2api/ent/usagelog"
 	"github.com/Wei-Shaw/sub2api/ent/user"
 	"github.com/Wei-Shaw/sub2api/ent/userattributevalue"
@@ -549,6 +551,44 @@ func (_c *UserCreate) AddPlatformQuotas(v ...*UserPlatformQuota) *UserCreate {
 	return _c.AddPlatformQuotaIDs(ids...)
 }
 
+// SetOwnedTeamID sets the "owned_team" edge to the Team entity by ID.
+func (_c *UserCreate) SetOwnedTeamID(id int64) *UserCreate {
+	_c.mutation.SetOwnedTeamID(id)
+	return _c
+}
+
+// SetNillableOwnedTeamID sets the "owned_team" edge to the Team entity by ID if the given value is not nil.
+func (_c *UserCreate) SetNillableOwnedTeamID(id *int64) *UserCreate {
+	if id != nil {
+		_c = _c.SetOwnedTeamID(*id)
+	}
+	return _c
+}
+
+// SetOwnedTeam sets the "owned_team" edge to the Team entity.
+func (_c *UserCreate) SetOwnedTeam(v *Team) *UserCreate {
+	return _c.SetOwnedTeamID(v.ID)
+}
+
+// SetTeamMembershipID sets the "team_membership" edge to the TeamMembership entity by ID.
+func (_c *UserCreate) SetTeamMembershipID(id int64) *UserCreate {
+	_c.mutation.SetTeamMembershipID(id)
+	return _c
+}
+
+// SetNillableTeamMembershipID sets the "team_membership" edge to the TeamMembership entity by ID if the given value is not nil.
+func (_c *UserCreate) SetNillableTeamMembershipID(id *int64) *UserCreate {
+	if id != nil {
+		_c = _c.SetTeamMembershipID(*id)
+	}
+	return _c
+}
+
+// SetTeamMembership sets the "team_membership" edge to the TeamMembership entity.
+func (_c *UserCreate) SetTeamMembership(v *TeamMembership) *UserCreate {
+	return _c.SetTeamMembershipID(v.ID)
+}
+
 // Mutation returns the UserMutation object of the builder.
 func (_c *UserCreate) Mutation() *UserMutation {
 	return _c.mutation
@@ -1073,6 +1113,38 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(userplatformquota.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.OwnedTeamIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2O,
+			Inverse: false,
+			Table:   user.OwnedTeamTable,
+			Columns: []string{user.OwnedTeamColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(team.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.TeamMembershipIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2O,
+			Inverse: false,
+			Table:   user.TeamMembershipTable,
+			Columns: []string{user.TeamMembershipColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(teammembership.FieldID, field.TypeInt64),
 			},
 		}
 		for _, k := range nodes {

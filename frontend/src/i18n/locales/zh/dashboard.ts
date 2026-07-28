@@ -634,6 +634,8 @@ export default {
     securityDescription: '密码、双因素认证和通知提醒集中放在右侧。',
     administrator: '管理员',
     user: '用户',
+    team: '团队',
+    teamMember: '团队成员',
     username: '用户名',
     email: '邮箱',
     status: '状态',

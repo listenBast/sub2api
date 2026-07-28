@@ -1573,6 +1573,137 @@ var (
 		Columns:    TLSFingerprintProfilesColumns,
 		PrimaryKey: []*schema.Column{TLSFingerprintProfilesColumns[0]},
 	}
+	// TeamsColumns holds the columns for the "teams" table.
+	TeamsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "updated_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "name", Type: field.TypeString, Size: 100},
+		{Name: "status", Type: field.TypeString, Size: 20, Default: "active"},
+		{Name: "owner_id", Type: field.TypeInt64, Unique: true},
+	}
+	// TeamsTable holds the schema information for the "teams" table.
+	TeamsTable = &schema.Table{
+		Name:       "teams",
+		Columns:    TeamsColumns,
+		PrimaryKey: []*schema.Column{TeamsColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "teams_users_owned_team",
+				Columns:    []*schema.Column{TeamsColumns[5]},
+				RefColumns: []*schema.Column{UsersColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "team_owner_id",
+				Unique:  true,
+				Columns: []*schema.Column{TeamsColumns[5]},
+			},
+			{
+				Name:    "team_status",
+				Unique:  false,
+				Columns: []*schema.Column{TeamsColumns[4]},
+			},
+		},
+	}
+	// TeamMembershipsColumns holds the columns for the "team_memberships" table.
+	TeamMembershipsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "updated_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "invited_by", Type: field.TypeInt64},
+		{Name: "remark", Type: field.TypeString, Size: 100, Default: ""},
+		{Name: "status", Type: field.TypeString, Size: 20, Default: "invited"},
+		{Name: "joined_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "exit_requested_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "team_id", Type: field.TypeInt64},
+		{Name: "user_id", Type: field.TypeInt64, Unique: true},
+	}
+	// TeamMembershipsTable holds the schema information for the "team_memberships" table.
+	TeamMembershipsTable = &schema.Table{
+		Name:       "team_memberships",
+		Columns:    TeamMembershipsColumns,
+		PrimaryKey: []*schema.Column{TeamMembershipsColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "team_memberships_teams_memberships",
+				Columns:    []*schema.Column{TeamMembershipsColumns[8]},
+				RefColumns: []*schema.Column{TeamsColumns[0]},
+				OnDelete:   schema.Cascade,
+			},
+			{
+				Symbol:     "team_memberships_users_team_membership",
+				Columns:    []*schema.Column{TeamMembershipsColumns[9]},
+				RefColumns: []*schema.Column{UsersColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "teammembership_user_id",
+				Unique:  true,
+				Columns: []*schema.Column{TeamMembershipsColumns[9]},
+			},
+			{
+				Name:    "teammembership_team_id_user_id",
+				Unique:  true,
+				Columns: []*schema.Column{TeamMembershipsColumns[8], TeamMembershipsColumns[9]},
+			},
+			{
+				Name:    "teammembership_team_id_status",
+				Unique:  false,
+				Columns: []*schema.Column{TeamMembershipsColumns[8], TeamMembershipsColumns[5]},
+			},
+		},
+	}
+	// TeamTransactionsColumns holds the columns for the "team_transactions" table.
+	TeamTransactionsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "operator_id", Type: field.TypeInt64},
+		{Name: "member_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "action", Type: field.TypeString, Size: 40},
+		{Name: "amount", Type: field.TypeFloat64, Default: 0, SchemaType: map[string]string{"postgres": "decimal(20,8)"}},
+		{Name: "owner_balance_before", Type: field.TypeFloat64, Default: 0, SchemaType: map[string]string{"postgres": "decimal(20,8)"}},
+		{Name: "owner_balance_after", Type: field.TypeFloat64, Default: 0, SchemaType: map[string]string{"postgres": "decimal(20,8)"}},
+		{Name: "member_balance_before", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "decimal(20,8)"}},
+		{Name: "member_balance_after", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "decimal(20,8)"}},
+		{Name: "note", Type: field.TypeString, Size: 500, Default: ""},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "team_id", Type: field.TypeInt64},
+	}
+	// TeamTransactionsTable holds the schema information for the "team_transactions" table.
+	TeamTransactionsTable = &schema.Table{
+		Name:       "team_transactions",
+		Columns:    TeamTransactionsColumns,
+		PrimaryKey: []*schema.Column{TeamTransactionsColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "team_transactions_teams_transactions",
+				Columns:    []*schema.Column{TeamTransactionsColumns[11]},
+				RefColumns: []*schema.Column{TeamsColumns[0]},
+				OnDelete:   schema.Cascade,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "teamtransaction_team_id_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{TeamTransactionsColumns[11], TeamTransactionsColumns[10]},
+			},
+			{
+				Name:    "teamtransaction_member_id_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{TeamTransactionsColumns[2], TeamTransactionsColumns[10]},
+			},
+			{
+				Name:    "teamtransaction_action",
+				Unique:  false,
+				Columns: []*schema.Column{TeamTransactionsColumns[3]},
+			},
+		},
+	}
 	// UsageCleanupTasksColumns holds the columns for the "usage_cleanup_tasks" table.
 	UsageCleanupTasksColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt64, Increment: true},
@@ -2094,6 +2225,9 @@ var (
 		SettingsTable,
 		SubscriptionPlansTable,
 		TLSFingerprintProfilesTable,
+		TeamsTable,
+		TeamMembershipsTable,
+		TeamTransactionsTable,
 		UsageCleanupTasksTable,
 		UsageLogsTable,
 		UsersTable,
@@ -2221,6 +2355,19 @@ func init() {
 	}
 	TLSFingerprintProfilesTable.Annotation = &entsql.Annotation{
 		Table: "tls_fingerprint_profiles",
+	}
+	TeamsTable.ForeignKeys[0].RefTable = UsersTable
+	TeamsTable.Annotation = &entsql.Annotation{
+		Table: "teams",
+	}
+	TeamMembershipsTable.ForeignKeys[0].RefTable = TeamsTable
+	TeamMembershipsTable.ForeignKeys[1].RefTable = UsersTable
+	TeamMembershipsTable.Annotation = &entsql.Annotation{
+		Table: "team_memberships",
+	}
+	TeamTransactionsTable.ForeignKeys[0].RefTable = TeamsTable
+	TeamTransactionsTable.Annotation = &entsql.Annotation{
+		Table: "team_transactions",
 	}
 	UsageCleanupTasksTable.Annotation = &entsql.Annotation{
 		Table: "usage_cleanup_tasks",
