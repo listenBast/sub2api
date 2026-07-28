@@ -40,3 +40,18 @@ func TestUpdateServiceChecksForkRepository(t *testing.T) {
 		t.Fatalf("expected fork repository, got %q", client.repo)
 	}
 }
+
+func TestGitHubAssetDownloadURLPrefersAPIURL(t *testing.T) {
+	asset := GitHubAsset{
+		APIURL:             "https://api.github.com/repos/listenBast/sub2api/releases/assets/1",
+		BrowserDownloadURL: "https://github.com/listenBast/sub2api/releases/download/v0.1.0/asset.tar.gz",
+	}
+	if got := githubAssetDownloadURL(asset); got != asset.APIURL {
+		t.Fatalf("expected API asset URL, got %q", got)
+	}
+
+	asset.APIURL = ""
+	if got := githubAssetDownloadURL(asset); got != asset.BrowserDownloadURL {
+		t.Fatalf("expected browser download fallback, got %q", got)
+	}
+}

@@ -124,9 +124,17 @@ type RollbackVersion struct {
 }
 
 type GitHubAsset struct {
+	APIURL             string `json:"url"`
 	Name               string `json:"name"`
 	BrowserDownloadURL string `json:"browser_download_url"`
 	Size               int64  `json:"size"`
+}
+
+func githubAssetDownloadURL(asset GitHubAsset) string {
+	if asset.APIURL != "" {
+		return asset.APIURL
+	}
+	return asset.BrowserDownloadURL
 }
 
 // CheckUpdate checks for available updates
@@ -352,7 +360,7 @@ func (s *UpdateService) RollbackToVersion(ctx context.Context, version string) e
 	for i, a := range match.Assets {
 		assets[i] = Asset{
 			Name:        a.Name,
-			DownloadURL: a.BrowserDownloadURL,
+			DownloadURL: githubAssetDownloadURL(a),
 			Size:        a.Size,
 		}
 	}
@@ -411,7 +419,7 @@ func (s *UpdateService) fetchLatestRelease(ctx context.Context) (*UpdateInfo, er
 	for i, a := range release.Assets {
 		assets[i] = Asset{
 			Name:        a.Name,
-			DownloadURL: a.BrowserDownloadURL,
+			DownloadURL: githubAssetDownloadURL(a),
 			Size:        a.Size,
 		}
 	}

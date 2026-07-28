@@ -106,7 +106,7 @@ func TestGitHubReleaseClientRedirectAuthorization(t *testing.T) {
 	}
 }
 
-func TestGitHubReleaseClientDoesNotAuthorizeDownloads(t *testing.T) {
+func TestGitHubReleaseClientAuthorizesOnlyAPIDownloads(t *testing.T) {
 	client := newTestGitHubReleaseClient()
 	client.updateGitHubToken = "update-secret"
 
@@ -127,9 +127,14 @@ func TestGitHubReleaseClientDoesNotAuthorizeDownloads(t *testing.T) {
 	require.NoError(t, client.DownloadFile(context.Background(), "https://objects.githubusercontent.com/asset", dest, 100))
 	_, err := client.FetchChecksumFile(context.Background(), "https://github.com/test/repo/releases/download/v1/checksums.txt")
 	require.NoError(t, err)
-	require.Len(t, headers, 2)
+	_, err = client.FetchChecksumFile(context.Background(), "https://api.github.com/repos/test/repo/releases/assets/1")
+	require.NoError(t, err)
+	require.Len(t, headers, 3)
+	require.Empty(t, headers[0].Get("Authorization"))
+	require.Empty(t, headers[1].Get("Authorization"))
+	require.Equal(t, "Bearer update-secret", headers[2].Get("Authorization"))
 	for _, header := range headers {
-		require.Empty(t, header.Get("Authorization"))
+		require.Equal(t, "application/octet-stream", header.Get("Accept"))
 	}
 }
 
