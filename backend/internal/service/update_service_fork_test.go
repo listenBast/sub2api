@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -53,5 +54,31 @@ func TestGitHubAssetDownloadURLPrefersAPIURL(t *testing.T) {
 	asset.APIURL = ""
 	if got := githubAssetDownloadURL(asset); got != asset.BrowserDownloadURL {
 		t.Fatalf("expected browser download fallback, got %q", got)
+	}
+}
+
+func TestReleaseAssetNameDoesNotComeFromAPIURL(t *testing.T) {
+	asset := Asset{
+		Name:        "sub2api_0.1.2_linux_amd64.tar.gz",
+		DownloadURL: "https://api.github.com/repos/listenBast/sub2api/releases/assets/494832126",
+	}
+
+	name, err := safeReleaseAssetName(asset.Name)
+	if err != nil {
+		t.Fatalf("safe release asset name: %v", err)
+	}
+	if name != asset.Name {
+		t.Fatalf("expected metadata asset name %q, got %q", asset.Name, name)
+	}
+	if filepath.Base(asset.DownloadURL) == name {
+		t.Fatalf("test setup must use an API URL whose basename differs from the asset name")
+	}
+}
+
+func TestReleaseAssetNameRejectsPaths(t *testing.T) {
+	for _, name := range []string{"", ".", "..", "../sub2api.tar.gz", `dir\sub2api.zip`} {
+		if _, err := safeReleaseAssetName(name); err == nil {
+			t.Fatalf("expected unsafe asset name %q to be rejected", name)
+		}
 	}
 }
