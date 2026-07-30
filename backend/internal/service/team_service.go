@@ -28,10 +28,7 @@ type TeamService struct {
 }
 
 func NewTeamService(client *dbent.Client, sqlDB *sql.DB, authCacheInvalidator APIKeyAuthCacheInvalidator) *TeamService {
-	rowLocks := true
-	if sqlDB != nil && strings.Contains(strings.ToLower(fmt.Sprintf("%T", sqlDB.Driver())), "sqlite") {
-		rowLocks = false
-	}
+	rowLocks := sqlDB == nil || !strings.Contains(strings.ToLower(fmt.Sprintf("%T", sqlDB.Driver())), "sqlite")
 	return &TeamService{client: client, sqlDB: sqlDB, authCacheInvalidator: authCacheInvalidator, rowLocks: rowLocks}
 }
 
