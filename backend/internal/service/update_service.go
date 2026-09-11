@@ -34,6 +34,7 @@ const (
 
 	// Security: allowed download domains for updates
 	allowedDownloadHost = "github.com"
+	allowedAPIHost      = "api.github.com"
 	allowedAssetHost    = "objects.githubusercontent.com"
 
 	// Security: max download size (500MB)
@@ -479,8 +480,10 @@ func validateDownloadURL(rawURL string) error {
 
 	// Check against allowed hosts
 	host := parsedURL.Host
-	// GitHub release URLs can be from github.com or objects.githubusercontent.com
-	if host != allowedDownloadHost &&
+	// GitHub release URLs can be the API asset endpoint, github.com, or the
+	// objects.githubusercontent.com redirect target.
+	if host != allowedAPIHost &&
+		host != allowedDownloadHost &&
 		!strings.HasSuffix(host, "."+allowedDownloadHost) &&
 		host != allowedAssetHost &&
 		!strings.HasSuffix(host, "."+allowedAssetHost) {

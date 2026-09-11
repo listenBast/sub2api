@@ -82,3 +82,15 @@ func TestReleaseAssetNameRejectsPaths(t *testing.T) {
 		}
 	}
 }
+
+func TestValidateDownloadURLAcceptsGitHubAPIAssetURL(t *testing.T) {
+	for _, rawURL := range []string{
+		"https://api.github.com/repos/listenBast/sub2api/releases/assets/1",
+		"https://github.com/listenBast/sub2api/releases/download/v0.1.31/sub2api.tar.gz",
+		"https://objects.githubusercontent.com/github-production-release-asset-1",
+	} {
+		if err := validateDownloadURL(rawURL); err != nil {
+			t.Fatalf("expected trusted GitHub URL %q, got %v", rawURL, err)
+		}
+	}
+}
