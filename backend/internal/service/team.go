@@ -59,9 +59,9 @@ var (
 )
 
 type TeamOwnerView struct {
-	UserID   int64   `json:"user_id"`
-	Email    string  `json:"email"`
-	Username string  `json:"username"`
+	UserID   int64  `json:"user_id"`
+	Email    string `json:"email"`
+	Username string `json:"username"`
 	// Balance 主账号余额，即团队资金池。
 	Balance float64 `json:"balance"`
 }

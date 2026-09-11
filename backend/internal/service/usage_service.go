@@ -40,7 +40,7 @@ type CreateUsageLogRequest struct {
 	DurationMs            *int    `json:"duration_ms"`
 	// BalanceMode is used by compatibility callers that still invoke
 	// UsageService.Create instead of the unified gateway billing path.
-	BalanceMode            string  `json:"balance_mode"`
+	BalanceMode string `json:"balance_mode"`
 }
 
 // UsageStats 使用统计

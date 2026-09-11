@@ -33,12 +33,12 @@ type APIKeyAuthSnapshot struct {
 
 // APIKeyAuthUserSnapshot 用户快照
 type APIKeyAuthUserSnapshot struct {
-	ID          int64   `json:"id"`
-	Status      string  `json:"status"`
-	Role        string  `json:"role"`
-	Balance     float64 `json:"balance"`
-	TeamBalance float64 `json:"team_balance,omitempty"` // fork：团队额度快照，用于免读库判定“没有团队额度”
-	Concurrency int     `json:"concurrency"`
+	ID            int64   `json:"id"`
+	Status        string  `json:"status"`
+	Role          string  `json:"role"`
+	Balance       float64 `json:"balance"`
+	TeamBalance   float64 `json:"team_balance,omitempty"` // fork：团队额度快照，用于免读库判定“没有团队额度”
+	Concurrency   int     `json:"concurrency"`
 	AllowedGroups []int64 `json:"allowed_groups,omitempty"`
 
 	// Balance notification fields (required for CheckBalanceAfterDeduction)
