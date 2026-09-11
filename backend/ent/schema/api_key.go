@@ -58,6 +58,13 @@ func (APIKey) Fields() []ent.Field {
 			Optional().
 			Comment("Blocked IPs/CIDRs"),
 
+		// ========== Team balance mode (fork) ==========
+		// 团队成员扣费方式：team_first / personal_first / team_only / personal_only。
+		field.String("balance_mode").
+			MaxLen(20).
+			Default("team_first").
+			Comment("Balance deduction mode for team members: team_first, personal_first, team_only, personal_only"),
+
 		// ========== Quota fields ==========
 		// Quota limit in USD (0 = unlimited)
 		field.Float("quota").

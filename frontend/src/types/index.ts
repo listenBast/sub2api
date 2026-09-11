@@ -87,6 +87,7 @@ export interface User {
   role: 'admin' | 'user' // User role for authorization
   balance: number // User balance for API usage
   frozen_balance?: number // Balance currently held by async batch jobs
+  team_balance?: number // 团队模式（fork）：主账号分配的团队额度
   concurrency: number // Allowed concurrent requests
   rpm_limit?: number // User-level RPM cap (0 = unlimited); effective as fallback when group has no rpm_limit
   status: 'active' | 'disabled' // Account status
@@ -751,7 +752,13 @@ export interface ApiKey {
   reset_5h_at: string | null
   reset_1d_at: string | null
   reset_7d_at: string | null
+  // 团队模式（fork）：该 Key 的扣费方式
+  balance_mode?: ApiKeyBalanceMode
 }
+
+// 团队成员 API Key 扣费方式（fork）
+export type ApiKeyBalanceMode = 'team_first' | 'personal_first' | 'team_only' | 'personal_only'
+export const API_KEY_BALANCE_MODES: ApiKeyBalanceMode[] = ['team_first', 'personal_first', 'team_only', 'personal_only']
 
 export interface CreateApiKeyRequest {
   name: string
@@ -764,6 +771,7 @@ export interface CreateApiKeyRequest {
   rate_limit_5h?: number
   rate_limit_1d?: number
   rate_limit_7d?: number
+  balance_mode?: ApiKeyBalanceMode
 }
 
 export interface UpdateApiKeyRequest {
@@ -779,6 +787,7 @@ export interface UpdateApiKeyRequest {
   rate_limit_1d?: number
   rate_limit_7d?: number
   reset_rate_limit_usage?: boolean
+  balance_mode?: ApiKeyBalanceMode
 }
 
 export interface CreateGroupRequest {

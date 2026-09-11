@@ -35,6 +35,8 @@ const (
 	TeamActionAdminMemberAdded     = "admin_member_added"
 	TeamActionMemberLimitsUpdated  = "member_limits_updated"
 	TeamActionStatusChanged        = "status_changed"
+	TeamActionOwnerTransferred     = "owner_transferred"
+	TeamActionAdminOwnerTransfer   = "admin_owner_transferred"
 
 	MaxTeamMembers = 100
 )
@@ -51,27 +53,32 @@ var (
 	ErrTeamInviteNotFound            = infraerrors.NotFound("TEAM_INVITE_NOT_FOUND", "没有找到待处理的团队邀请")
 	ErrTeamPendingPayments           = infraerrors.Conflict("TEAM_PENDING_PAYMENTS", "加入团队前请先完成或取消待处理的支付、退款操作")
 	ErrTeamInsufficientBalance       = infraerrors.Conflict("TEAM_INSUFFICIENT_BALANCE", "团队主账号余额不足")
-	ErrTeamMemberInsufficientBalance = infraerrors.Conflict("TEAM_MEMBER_INSUFFICIENT_BALANCE", "团队成员余额不足，无法收回该额度")
-	ErrTeamFrozenBalancePending      = infraerrors.Conflict("TEAM_FROZEN_BALANCE_PENDING", "成员仍有未结算的冻结余额，暂时不能加入或退出团队")
+	ErrTeamMemberInsufficientBalance = infraerrors.Conflict("TEAM_MEMBER_INSUFFICIENT_BALANCE", "团队成员的团队额度不足，无法收回该额度")
 	ErrTeamExitAlreadyPending        = infraerrors.Conflict("TEAM_EXIT_ALREADY_PENDING", "退出团队申请已经提交，请等待主账号处理")
-	ErrTeamFinancialRestricted       = infraerrors.Forbidden("TEAM_MEMBER_FINANCIAL_RESTRICTED", "团队成员不能自行兑换或充值余额")
+	ErrTeamOwnerTransferTarget       = infraerrors.BadRequest("TEAM_OWNER_TRANSFER_TARGET_INVALID", "只能把主账号转移给已加入团队的成员")
 )
 
 type TeamOwnerView struct {
 	UserID   int64   `json:"user_id"`
 	Email    string  `json:"email"`
 	Username string  `json:"username"`
-	Balance  float64 `json:"balance"`
+	// Balance 主账号余额，即团队资金池。
+	Balance float64 `json:"balance"`
 }
 
 type TeamMemberView struct {
-	MembershipID    int64      `json:"membership_id"`
-	UserID          int64      `json:"user_id"`
-	Email           string     `json:"email"`
-	Username        string     `json:"username"`
-	Remark          string     `json:"remark"`
-	Status          string     `json:"status"`
-	Balance         float64    `json:"balance"`
+	MembershipID int64  `json:"membership_id"`
+	UserID       int64  `json:"user_id"`
+	Email        string `json:"email"`
+	Username     string `json:"username"`
+	Remark       string `json:"remark"`
+	Status       string `json:"status"`
+	// Balance 成员个人余额（自己充值/兑换所得，不受团队管理）。
+	Balance float64 `json:"balance"`
+	// TeamBalance 主账号分配给该成员的团队额度。
+	TeamBalance float64 `json:"team_balance"`
+	// TotalBalance 成员当前可用总额 = 个人余额 + 团队额度。
+	TotalBalance    float64    `json:"total_balance"`
 	FrozenBalance   float64    `json:"frozen_balance"`
 	Concurrency     int        `json:"concurrency"`
 	RPMLimit        int        `json:"rpm_limit"`
@@ -104,8 +111,10 @@ type TeamAdminOverview struct {
 }
 
 type TeamContext struct {
-	Role                string          `json:"role"`
-	MembershipStatus    string          `json:"membership_status,omitempty"`
+	Role             string `json:"role"`
+	MembershipStatus string `json:"membership_status,omitempty"`
+	// FinancialRestricted 历史字段：成员现在可以自行充值/兑换到个人余额，因此恒为 false。
+	// 保留字段是为了兼容旧前端，避免旧版本隐藏兑换入口时读取到 undefined。
 	FinancialRestricted bool            `json:"financial_restricted"`
 	Team                *TeamSummary    `json:"team,omitempty"`
 	CurrentMembership   *TeamMemberView `json:"current_membership,omitempty"`
@@ -168,6 +177,24 @@ type TeamMemberUsageStat struct {
 	Requests   int64   `json:"requests"`
 	Tokens     int64   `json:"tokens"`
 	ActualCost float64 `json:"actual_cost"`
+}
+
+// TeamMemberUsageSummary 团队用量按单个成员（或主账号）汇总的结果，
+// 用量统计遵循与用量明细相同的筛选条件（模型、时间范围）。
+type TeamMemberUsageSummary struct {
+	UserID   int64  `json:"user_id"`
+	Email    string `json:"email"`
+	Username string `json:"username"`
+	Remark   string `json:"remark,omitempty"`
+	Role     string `json:"role"`
+	// Balance 个人余额（主账号即团队资金池），TeamBalance 团队额度，TotalBalance 两者之和。
+	Balance      float64 `json:"balance"`
+	TeamBalance  float64 `json:"team_balance"`
+	TotalBalance float64 `json:"total_balance"`
+	Requests     int64   `json:"requests"`
+	Tokens       int64   `json:"tokens"`
+	TotalCost    float64 `json:"total_cost"`
+	ActualCost   float64 `json:"actual_cost"`
 }
 
 type TeamDashboard struct {

@@ -306,25 +306,44 @@ func (h *TeamHandler) ListTransactions(c *gin.Context) {
 	response.Paginated(c, items, result.Total, result.Page, result.PageSize)
 }
 
-// RequireIndependentAccount 拦截团队成员自行获得余额的入口。
-func (h *TeamHandler) RequireIndependentAccount(c *gin.Context) {
-	userID, ok := currentTeamUserID(c)
+// UsageSummary 主账号按成员汇总团队用量（余额、请求数、Token 数、实际消费）。
+func (h *TeamHandler) UsageSummary(c *gin.Context) {
+	ownerID, ok := currentTeamUserID(c)
 	if !ok {
-		c.Abort()
 		return
 	}
-	restricted, err := h.teamService.IsFinancialActionRestricted(c.Request.Context(), userID)
+	filter, err := ParseTeamUsageFilter(c)
+	if err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+	summary, err := h.teamService.GetUsageSummary(c.Request.Context(), ownerID, filter)
 	if err != nil {
 		response.ErrorFrom(c, err)
-		c.Abort()
 		return
 	}
-	if restricted {
-		response.ErrorFrom(c, service.ErrTeamFinancialRestricted)
-		c.Abort()
+	response.Success(c, summary)
+}
+
+// TransferOwnership 主账号把主账号身份转移给指定成员，自己降为普通成员。
+func (h *TeamHandler) TransferOwnership(c *gin.Context) {
+	ownerID, ok := currentTeamUserID(c)
+	if !ok {
 		return
 	}
-	c.Next()
+	var req struct {
+		MemberID int64 `json:"member_id" binding:"required,gt=0"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "请选择要转移的成员")
+		return
+	}
+	result, err := h.teamService.TransferOwnership(c.Request.Context(), ownerID, req.MemberID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, result)
 }
 
 func currentTeamUserID(c *gin.Context) (int64, bool) {

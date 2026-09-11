@@ -128,6 +128,7 @@ type APIKeyMutation struct {
 	appendip_whitelist []string
 	ip_blacklist       *[]string
 	appendip_blacklist []string
+	balance_mode       *string
 	quota              *float64
 	addquota           *float64
 	quota_used         *float64
@@ -750,6 +751,42 @@ func (m *APIKeyMutation) ResetIPBlacklist() {
 	m.ip_blacklist = nil
 	m.appendip_blacklist = nil
 	delete(m.clearedFields, apikey.FieldIPBlacklist)
+}
+
+// SetBalanceMode sets the "balance_mode" field.
+func (m *APIKeyMutation) SetBalanceMode(s string) {
+	m.balance_mode = &s
+}
+
+// BalanceMode returns the value of the "balance_mode" field in the mutation.
+func (m *APIKeyMutation) BalanceMode() (r string, exists bool) {
+	v := m.balance_mode
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldBalanceMode returns the old "balance_mode" field's value of the APIKey entity.
+// If the APIKey object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *APIKeyMutation) OldBalanceMode(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldBalanceMode is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldBalanceMode requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldBalanceMode: %w", err)
+	}
+	return oldValue.BalanceMode, nil
+}
+
+// ResetBalanceMode resets all changes to the "balance_mode" field.
+func (m *APIKeyMutation) ResetBalanceMode() {
+	m.balance_mode = nil
 }
 
 // SetQuota sets the "quota" field.
@@ -1538,7 +1575,7 @@ func (m *APIKeyMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *APIKeyMutation) Fields() []string {
-	fields := make([]string, 0, 23)
+	fields := make([]string, 0, 24)
 	if m.created_at != nil {
 		fields = append(fields, apikey.FieldCreatedAt)
 	}
@@ -1571,6 +1608,9 @@ func (m *APIKeyMutation) Fields() []string {
 	}
 	if m.ip_blacklist != nil {
 		fields = append(fields, apikey.FieldIPBlacklist)
+	}
+	if m.balance_mode != nil {
+		fields = append(fields, apikey.FieldBalanceMode)
 	}
 	if m.quota != nil {
 		fields = append(fields, apikey.FieldQuota)
@@ -1638,6 +1678,8 @@ func (m *APIKeyMutation) Field(name string) (ent.Value, bool) {
 		return m.IPWhitelist()
 	case apikey.FieldIPBlacklist:
 		return m.IPBlacklist()
+	case apikey.FieldBalanceMode:
+		return m.BalanceMode()
 	case apikey.FieldQuota:
 		return m.Quota()
 	case apikey.FieldQuotaUsed:
@@ -1693,6 +1735,8 @@ func (m *APIKeyMutation) OldField(ctx context.Context, name string) (ent.Value, 
 		return m.OldIPWhitelist(ctx)
 	case apikey.FieldIPBlacklist:
 		return m.OldIPBlacklist(ctx)
+	case apikey.FieldBalanceMode:
+		return m.OldBalanceMode(ctx)
 	case apikey.FieldQuota:
 		return m.OldQuota(ctx)
 	case apikey.FieldQuotaUsed:
@@ -1802,6 +1846,13 @@ func (m *APIKeyMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetIPBlacklist(v)
+		return nil
+	case apikey.FieldBalanceMode:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetBalanceMode(v)
 		return nil
 	case apikey.FieldQuota:
 		v, ok := value.(float64)
@@ -2124,6 +2175,9 @@ func (m *APIKeyMutation) ResetField(name string) error {
 		return nil
 	case apikey.FieldIPBlacklist:
 		m.ResetIPBlacklist()
+		return nil
+	case apikey.FieldBalanceMode:
+		m.ResetBalanceMode()
 		return nil
 	case apikey.FieldQuota:
 		m.ResetQuota()
@@ -51635,6 +51689,8 @@ type UserMutation struct {
 	addbalance                    *float64
 	frozen_balance                *float64
 	addfrozen_balance             *float64
+	team_balance                  *float64
+	addteam_balance               *float64
 	concurrency                   *int
 	addconcurrency                *int
 	status                        *string
@@ -52142,6 +52198,62 @@ func (m *UserMutation) AddedFrozenBalance() (r float64, exists bool) {
 func (m *UserMutation) ResetFrozenBalance() {
 	m.frozen_balance = nil
 	m.addfrozen_balance = nil
+}
+
+// SetTeamBalance sets the "team_balance" field.
+func (m *UserMutation) SetTeamBalance(f float64) {
+	m.team_balance = &f
+	m.addteam_balance = nil
+}
+
+// TeamBalance returns the value of the "team_balance" field in the mutation.
+func (m *UserMutation) TeamBalance() (r float64, exists bool) {
+	v := m.team_balance
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTeamBalance returns the old "team_balance" field's value of the User entity.
+// If the User object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserMutation) OldTeamBalance(ctx context.Context) (v float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTeamBalance is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTeamBalance requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTeamBalance: %w", err)
+	}
+	return oldValue.TeamBalance, nil
+}
+
+// AddTeamBalance adds f to the "team_balance" field.
+func (m *UserMutation) AddTeamBalance(f float64) {
+	if m.addteam_balance != nil {
+		*m.addteam_balance += f
+	} else {
+		m.addteam_balance = &f
+	}
+}
+
+// AddedTeamBalance returns the value that was added to the "team_balance" field in this mutation.
+func (m *UserMutation) AddedTeamBalance() (r float64, exists bool) {
+	v := m.addteam_balance
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetTeamBalance resets all changes to the "team_balance" field.
+func (m *UserMutation) ResetTeamBalance() {
+	m.team_balance = nil
+	m.addteam_balance = nil
 }
 
 // SetConcurrency sets the "concurrency" field.
@@ -53716,7 +53828,7 @@ func (m *UserMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *UserMutation) Fields() []string {
-	fields := make([]string, 0, 25)
+	fields := make([]string, 0, 26)
 	if m.created_at != nil {
 		fields = append(fields, user.FieldCreatedAt)
 	}
@@ -53740,6 +53852,9 @@ func (m *UserMutation) Fields() []string {
 	}
 	if m.frozen_balance != nil {
 		fields = append(fields, user.FieldFrozenBalance)
+	}
+	if m.team_balance != nil {
+		fields = append(fields, user.FieldTeamBalance)
 	}
 	if m.concurrency != nil {
 		fields = append(fields, user.FieldConcurrency)
@@ -53816,6 +53931,8 @@ func (m *UserMutation) Field(name string) (ent.Value, bool) {
 		return m.Balance()
 	case user.FieldFrozenBalance:
 		return m.FrozenBalance()
+	case user.FieldTeamBalance:
+		return m.TeamBalance()
 	case user.FieldConcurrency:
 		return m.Concurrency()
 	case user.FieldStatus:
@@ -53875,6 +53992,8 @@ func (m *UserMutation) OldField(ctx context.Context, name string) (ent.Value, er
 		return m.OldBalance(ctx)
 	case user.FieldFrozenBalance:
 		return m.OldFrozenBalance(ctx)
+	case user.FieldTeamBalance:
+		return m.OldTeamBalance(ctx)
 	case user.FieldConcurrency:
 		return m.OldConcurrency(ctx)
 	case user.FieldStatus:
@@ -53973,6 +54092,13 @@ func (m *UserMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetFrozenBalance(v)
+		return nil
+	case user.FieldTeamBalance:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTeamBalance(v)
 		return nil
 	case user.FieldConcurrency:
 		v, ok := value.(int)
@@ -54107,6 +54233,9 @@ func (m *UserMutation) AddedFields() []string {
 	if m.addfrozen_balance != nil {
 		fields = append(fields, user.FieldFrozenBalance)
 	}
+	if m.addteam_balance != nil {
+		fields = append(fields, user.FieldTeamBalance)
+	}
 	if m.addconcurrency != nil {
 		fields = append(fields, user.FieldConcurrency)
 	}
@@ -54131,6 +54260,8 @@ func (m *UserMutation) AddedField(name string) (ent.Value, bool) {
 		return m.AddedBalance()
 	case user.FieldFrozenBalance:
 		return m.AddedFrozenBalance()
+	case user.FieldTeamBalance:
+		return m.AddedTeamBalance()
 	case user.FieldConcurrency:
 		return m.AddedConcurrency()
 	case user.FieldBalanceNotifyThreshold:
@@ -54161,6 +54292,13 @@ func (m *UserMutation) AddField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.AddFrozenBalance(v)
+		return nil
+	case user.FieldTeamBalance:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddTeamBalance(v)
 		return nil
 	case user.FieldConcurrency:
 		v, ok := value.(int)
@@ -54279,6 +54417,9 @@ func (m *UserMutation) ResetField(name string) error {
 		return nil
 	case user.FieldFrozenBalance:
 		m.ResetFrozenBalance()
+		return nil
+	case user.FieldTeamBalance:
+		m.ResetTeamBalance()
 		return nil
 	case user.FieldConcurrency:
 		m.ResetConcurrency()

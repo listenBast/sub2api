@@ -289,6 +289,14 @@ export default {
     currentExpiration: '当前过期时间',
     expiresAt: '过期时间',
     noExpiration: '永久有效',
+    balanceMode: '扣费方式',
+    balanceModeHint: '团队成员可按密钥选择先扣团队额度还是个人余额。兑换和充值只会进入个人余额。',
+    balanceModes: {
+      team_first: '先扣团队额度，不足再扣个人余额',
+      personal_first: '先扣个人余额，不足再扣团队额度',
+      team_only: '仅使用团队额度',
+      personal_only: '仅使用个人余额'
+    },
     status: {
       active: '活跃',
       inactive: '已停用',

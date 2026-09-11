@@ -139,6 +139,20 @@ func (_c *APIKeyCreate) SetIPBlacklist(v []string) *APIKeyCreate {
 	return _c
 }
 
+// SetBalanceMode sets the "balance_mode" field.
+func (_c *APIKeyCreate) SetBalanceMode(v string) *APIKeyCreate {
+	_c.mutation.SetBalanceMode(v)
+	return _c
+}
+
+// SetNillableBalanceMode sets the "balance_mode" field if the given value is not nil.
+func (_c *APIKeyCreate) SetNillableBalanceMode(v *string) *APIKeyCreate {
+	if v != nil {
+		_c.SetBalanceMode(*v)
+	}
+	return _c
+}
+
 // SetQuota sets the "quota" field.
 func (_c *APIKeyCreate) SetQuota(v float64) *APIKeyCreate {
 	_c.mutation.SetQuota(v)
@@ -387,6 +401,10 @@ func (_c *APIKeyCreate) defaults() error {
 		v := apikey.DefaultStatus
 		_c.mutation.SetStatus(v)
 	}
+	if _, ok := _c.mutation.BalanceMode(); !ok {
+		v := apikey.DefaultBalanceMode
+		_c.mutation.SetBalanceMode(v)
+	}
 	if _, ok := _c.mutation.Quota(); !ok {
 		v := apikey.DefaultQuota
 		_c.mutation.SetQuota(v)
@@ -455,6 +473,14 @@ func (_c *APIKeyCreate) check() error {
 	if v, ok := _c.mutation.Status(); ok {
 		if err := apikey.StatusValidator(v); err != nil {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "APIKey.status": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.BalanceMode(); !ok {
+		return &ValidationError{Name: "balance_mode", err: errors.New(`ent: missing required field "APIKey.balance_mode"`)}
+	}
+	if v, ok := _c.mutation.BalanceMode(); ok {
+		if err := apikey.BalanceModeValidator(v); err != nil {
+			return &ValidationError{Name: "balance_mode", err: fmt.Errorf(`ent: validator failed for field "APIKey.balance_mode": %w`, err)}
 		}
 	}
 	if _, ok := _c.mutation.Quota(); !ok {
@@ -546,6 +572,10 @@ func (_c *APIKeyCreate) createSpec() (*APIKey, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.IPBlacklist(); ok {
 		_spec.SetField(apikey.FieldIPBlacklist, field.TypeJSON, value)
 		_node.IPBlacklist = value
+	}
+	if value, ok := _c.mutation.BalanceMode(); ok {
+		_spec.SetField(apikey.FieldBalanceMode, field.TypeString, value)
+		_node.BalanceMode = value
 	}
 	if value, ok := _c.mutation.Quota(); ok {
 		_spec.SetField(apikey.FieldQuota, field.TypeFloat64, value)
@@ -844,6 +874,18 @@ func (u *APIKeyUpsert) UpdateIPBlacklist() *APIKeyUpsert {
 // ClearIPBlacklist clears the value of the "ip_blacklist" field.
 func (u *APIKeyUpsert) ClearIPBlacklist() *APIKeyUpsert {
 	u.SetNull(apikey.FieldIPBlacklist)
+	return u
+}
+
+// SetBalanceMode sets the "balance_mode" field.
+func (u *APIKeyUpsert) SetBalanceMode(v string) *APIKeyUpsert {
+	u.Set(apikey.FieldBalanceMode, v)
+	return u
+}
+
+// UpdateBalanceMode sets the "balance_mode" field to the value that was provided on create.
+func (u *APIKeyUpsert) UpdateBalanceMode() *APIKeyUpsert {
+	u.SetExcluded(apikey.FieldBalanceMode)
 	return u
 }
 
@@ -1280,6 +1322,20 @@ func (u *APIKeyUpsertOne) UpdateIPBlacklist() *APIKeyUpsertOne {
 func (u *APIKeyUpsertOne) ClearIPBlacklist() *APIKeyUpsertOne {
 	return u.Update(func(s *APIKeyUpsert) {
 		s.ClearIPBlacklist()
+	})
+}
+
+// SetBalanceMode sets the "balance_mode" field.
+func (u *APIKeyUpsertOne) SetBalanceMode(v string) *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetBalanceMode(v)
+	})
+}
+
+// UpdateBalanceMode sets the "balance_mode" field to the value that was provided on create.
+func (u *APIKeyUpsertOne) UpdateBalanceMode() *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateBalanceMode()
 	})
 }
 
@@ -1918,6 +1974,20 @@ func (u *APIKeyUpsertBulk) UpdateIPBlacklist() *APIKeyUpsertBulk {
 func (u *APIKeyUpsertBulk) ClearIPBlacklist() *APIKeyUpsertBulk {
 	return u.Update(func(s *APIKeyUpsert) {
 		s.ClearIPBlacklist()
+	})
+}
+
+// SetBalanceMode sets the "balance_mode" field.
+func (u *APIKeyUpsertBulk) SetBalanceMode(v string) *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetBalanceMode(v)
+	})
+}
+
+// UpdateBalanceMode sets the "balance_mode" field to the value that was provided on create.
+func (u *APIKeyUpsertBulk) UpdateBalanceMode() *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateBalanceMode()
 	})
 }
 

@@ -14,15 +14,15 @@ import (
 )
 
 const (
-	conditionalBalanceDeductSQL = `(?s)UPDATE users\s+SET balance = balance - \$1,\s+updated_at = NOW\(\)\s+WHERE id = \$2 AND deleted_at IS NULL AND balance >= \$1\s+RETURNING balance`
-	overdraftBalanceDeductSQL   = `(?s)UPDATE users\s+SET balance = balance - \$1,\s+updated_at = NOW\(\)\s+WHERE id = \$2 AND deleted_at IS NULL\s+RETURNING balance`
-	reserveBatchImageHoldSQL    = `(?s)UPDATE users\s+SET balance = balance - \$1,\s+frozen_balance = COALESCE\(frozen_balance, 0\) \+ \$1,\s+updated_at = NOW\(\)\s+WHERE id = \$2 AND deleted_at IS NULL AND balance >= \$1\s+RETURNING balance, frozen_balance`
+	// fork：团队模式下余额扣费在同一条 UPDATE 中拆分个人余额与团队额度。
+	splitBalanceDeductSQL    = `(?s)WITH current_user_row AS .*FROM users u.*FOR UPDATE.*UPDATE users u.*RETURNING u\.id, u\.balance, u\.team_balance.*SELECT updated\.balance, updated\.team_balance, split\.team_part`
+	reserveBatchImageHoldSQL = `(?s)UPDATE users\s+SET balance = balance - \$1,\s+frozen_balance = COALESCE\(frozen_balance, 0\) \+ \$1,\s+updated_at = NOW\(\)\s+WHERE id = \$2 AND deleted_at IS NULL AND balance >= \$1\s+RETURNING balance, frozen_balance`
 	captureBatchImageHoldSQL    = `(?s)UPDATE users\s+SET balance = balance\s+\+ CASE WHEN \$1 > \$2 THEN \$1 - \$2 ELSE 0 END\s+- CASE WHEN \$2 > \$1 THEN \$2 - \$1 ELSE 0 END,\s+frozen_balance = COALESCE\(frozen_balance, 0\) - \$1,\s+updated_at = NOW\(\)\s+WHERE id = \$3 AND deleted_at IS NULL AND COALESCE\(frozen_balance, 0\) >= \$1\s+RETURNING balance, frozen_balance`
 	releaseBatchImageHoldSQL    = `(?s)UPDATE users\s+SET balance = balance \+ \$1,\s+frozen_balance = COALESCE\(frozen_balance, 0\) - \$1,\s+updated_at = NOW\(\)\s+WHERE id = \$2 AND deleted_at IS NULL AND COALESCE\(frozen_balance, 0\) >= \$1\s+RETURNING balance, frozen_balance`
 	userExistsForBillingSQL     = `(?s)SELECT 1\s+FROM users\s+WHERE id = \$1 AND deleted_at IS NULL`
 )
 
-func TestDeductUsageBillingBalance_UsesSufficientBalanceGuard(t *testing.T) {
+func TestDeductUsageBillingBalance_PersonalOnlyDeductsPersonalPool(t *testing.T) {
 	ctx := context.Background()
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
@@ -31,20 +31,23 @@ func TestDeductUsageBillingBalance_UsesSufficientBalanceGuard(t *testing.T) {
 	mock.ExpectBegin()
 	tx, err := db.BeginTx(ctx, nil)
 	require.NoError(t, err)
-	mock.ExpectQuery(conditionalBalanceDeductSQL).
-		WithArgs(2.5, int64(42)).
-		WillReturnRows(sqlmock.NewRows([]string{"balance"}).AddRow(7.5))
+	// 非团队成员：team_balance 为 0，team_first 退化为只扣个人余额（team_part = 0）。
+	mock.ExpectQuery(splitBalanceDeductSQL).
+		WithArgs(2.5, int64(42), service.BalanceModeTeamFirst).
+		WillReturnRows(sqlmock.NewRows([]string{"balance", "team_balance", "team_part"}).AddRow(7.5, 0.0, 0.0))
 	mock.ExpectCommit()
 
-	newBalance, sufficient, err := deductUsageBillingBalance(ctx, tx, 42, 2.5)
+	deduction, err := deductUsageBillingBalance(ctx, tx, 42, 2.5, "")
 	require.NoError(t, err)
-	require.True(t, sufficient)
-	require.InDelta(t, 7.5, newBalance, 0.000001)
+	require.True(t, deduction.sufficient)
+	require.InDelta(t, 7.5, deduction.newBalance, 0.000001)
+	require.InDelta(t, 2.5, deduction.personalPart, 0.000001)
+	require.InDelta(t, 0, deduction.teamPart, 0.000001)
 	require.NoError(t, tx.Commit())
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
-func TestDeductUsageBillingBalance_RecordsOverdraftWhenGuardMisses(t *testing.T) {
+func TestDeductUsageBillingBalance_TeamFirstSplitsAcrossPools(t *testing.T) {
 	ctx := context.Background()
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
@@ -53,18 +56,43 @@ func TestDeductUsageBillingBalance_RecordsOverdraftWhenGuardMisses(t *testing.T)
 	mock.ExpectBegin()
 	tx, err := db.BeginTx(ctx, nil)
 	require.NoError(t, err)
-	mock.ExpectQuery(conditionalBalanceDeductSQL).
-		WithArgs(10.0, int64(42)).
-		WillReturnError(sql.ErrNoRows)
-	mock.ExpectQuery(overdraftBalanceDeductSQL).
-		WithArgs(10.0, int64(42)).
-		WillReturnRows(sqlmock.NewRows([]string{"balance"}).AddRow(-5.0))
+	// 团队额度只剩 4，其余 6 从个人余额扣：两个资金池都未透支。
+	mock.ExpectQuery(splitBalanceDeductSQL).
+		WithArgs(10.0, int64(42), service.BalanceModeTeamFirst).
+		WillReturnRows(sqlmock.NewRows([]string{"balance", "team_balance", "team_part"}).AddRow(14.0, 0.0, 4.0))
 	mock.ExpectCommit()
 
-	newBalance, sufficient, err := deductUsageBillingBalance(ctx, tx, 42, 10)
+	deduction, err := deductUsageBillingBalance(ctx, tx, 42, 10, service.BalanceModeTeamFirst)
 	require.NoError(t, err)
-	require.False(t, sufficient)
-	require.InDelta(t, -5.0, newBalance, 0.000001)
+	require.True(t, deduction.sufficient)
+	require.InDelta(t, 4.0, deduction.teamPart, 0.000001)
+	require.InDelta(t, 6.0, deduction.personalPart, 0.000001)
+	require.InDelta(t, 14.0, deduction.newBalance, 0.000001)
+	require.InDelta(t, 0, deduction.newTeamBalance, 0.000001)
+	require.NoError(t, tx.Commit())
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestDeductUsageBillingBalance_RecordsOverdraftWhenPoolGoesNegative(t *testing.T) {
+	ctx := context.Background()
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer func() { _ = db.Close() }()
+
+	mock.ExpectBegin()
+	tx, err := db.BeginTx(ctx, nil)
+	require.NoError(t, err)
+	// team_only：团队额度不足仍然记账，team_balance 变为负数即为透支。
+	mock.ExpectQuery(splitBalanceDeductSQL).
+		WithArgs(10.0, int64(42), service.BalanceModeTeamOnly).
+		WillReturnRows(sqlmock.NewRows([]string{"balance", "team_balance", "team_part"}).AddRow(20.0, -5.0, 10.0))
+	mock.ExpectCommit()
+
+	deduction, err := deductUsageBillingBalance(ctx, tx, 42, 10, service.BalanceModeTeamOnly)
+	require.NoError(t, err)
+	require.False(t, deduction.sufficient)
+	require.InDelta(t, -5.0, deduction.newTeamBalance, 0.000001)
+	require.InDelta(t, 0, deduction.personalPart, 0.000001)
 	require.NoError(t, tx.Commit())
 	require.NoError(t, mock.ExpectationsWereMet())
 }
@@ -78,12 +106,9 @@ func TestApplyUsageBillingEffects_FlagsBalanceOverdraft(t *testing.T) {
 	mock.ExpectBegin()
 	tx, err := db.BeginTx(ctx, nil)
 	require.NoError(t, err)
-	mock.ExpectQuery(conditionalBalanceDeductSQL).
-		WithArgs(10.0, int64(42)).
-		WillReturnError(sql.ErrNoRows)
-	mock.ExpectQuery(overdraftBalanceDeductSQL).
-		WithArgs(10.0, int64(42)).
-		WillReturnRows(sqlmock.NewRows([]string{"balance"}).AddRow(-5.0))
+	mock.ExpectQuery(splitBalanceDeductSQL).
+		WithArgs(10.0, int64(42), service.BalanceModeTeamFirst).
+		WillReturnRows(sqlmock.NewRows([]string{"balance", "team_balance", "team_part"}).AddRow(-5.0, 0.0, 0.0))
 	mock.ExpectCommit()
 
 	result := &service.UsageBillingApplyResult{Applied: true}
@@ -94,6 +119,8 @@ func TestApplyUsageBillingEffects_FlagsBalanceOverdraft(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result.NewBalance)
 	require.InDelta(t, -5.0, *result.NewBalance, 0.000001)
+	require.InDelta(t, 10.0, result.PersonalBalanceCost, 0.000001)
+	require.InDelta(t, 0, result.TeamBalanceCost, 0.000001)
 	require.True(t, result.BalanceOverdrafted)
 	require.NoError(t, tx.Commit())
 	require.NoError(t, mock.ExpectationsWereMet())
@@ -108,15 +135,12 @@ func TestDeductUsageBillingBalance_ReturnsUserNotFoundWhenNoUserUpdated(t *testi
 	mock.ExpectBegin()
 	tx, err := db.BeginTx(ctx, nil)
 	require.NoError(t, err)
-	mock.ExpectQuery(conditionalBalanceDeductSQL).
-		WithArgs(10.0, int64(42)).
-		WillReturnError(sql.ErrNoRows)
-	mock.ExpectQuery(overdraftBalanceDeductSQL).
-		WithArgs(10.0, int64(42)).
+	mock.ExpectQuery(splitBalanceDeductSQL).
+		WithArgs(10.0, int64(42), service.BalanceModeTeamFirst).
 		WillReturnError(sql.ErrNoRows)
 	mock.ExpectRollback()
 
-	_, _, err = deductUsageBillingBalance(ctx, tx, 42, 10)
+	_, err = deductUsageBillingBalance(ctx, tx, 42, 10, service.BalanceModeTeamFirst)
 	require.ErrorIs(t, err, service.ErrUserNotFound)
 	require.NoError(t, tx.Rollback())
 	require.NoError(t, mock.ExpectationsWereMet())

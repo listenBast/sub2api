@@ -32,7 +32,7 @@ func RegisterUserRoutes(
 			user.PUT("/password", h.User.ChangePassword)
 			user.PUT("", h.User.UpdateProfile)
 			user.GET("/aff", h.User.GetAffiliate)
-			user.POST("/aff/transfer", h.Team.RequireIndependentAccount, h.User.TransferAffiliateQuota)
+			user.POST("/aff/transfer", h.User.TransferAffiliateQuota)
 			user.POST("/account-bindings/email/send-code", h.User.SendEmailBindingCode)
 			user.POST("/account-bindings/email", h.User.BindEmailIdentity)
 			user.DELETE("/account-bindings/:provider", h.User.UnbindIdentity)
@@ -83,7 +83,9 @@ func RegisterUserRoutes(
 			team.POST("/exit", h.Team.RequestExit)
 			team.GET("/dashboard", h.Team.Dashboard)
 			team.GET("/usage", h.Team.ListUsage)
+			team.GET("/usage/summary", h.Team.UsageSummary)
 			team.GET("/transactions", h.Team.ListTransactions)
+			team.POST("/transfer-owner", h.Team.TransferOwnership)
 			team.POST("/members/:id/balance", h.Team.AllocateBalance)
 			team.PATCH("/members/:id/remark", h.Team.UpdateMemberRemark)
 			team.PATCH("/members/:id/limits", h.Team.UpdateMemberLimits)
@@ -141,7 +143,7 @@ func RegisterUserRoutes(
 		// 卡密兑换
 		redeem := authenticated.Group("/redeem")
 		{
-			redeem.POST("", h.Team.RequireIndependentAccount, h.Redeem.Redeem)
+			redeem.POST("", h.Redeem.Redeem)
 			redeem.GET("/history", h.Redeem.GetHistory)
 		}
 

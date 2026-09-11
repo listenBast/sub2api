@@ -82,6 +82,19 @@ vi.mock('@/stores/app', () => ({
   }),
 }))
 
+vi.mock('@/stores', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/stores')>()
+  return {
+    ...actual,
+    useTeamStore: () => ({
+      loaded: true,
+      isOwner: false,
+      isMember: false,
+      fetchContext: vi.fn()
+    })
+  }
+})
+
 vi.mock('@/stores/onboarding', () => ({
   useOnboardingStore: () => ({
     isCurrentStep,

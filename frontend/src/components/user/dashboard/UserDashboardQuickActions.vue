@@ -80,7 +80,7 @@ const { t } = useI18n()
 const authStore = useAuthStore()
 const teamStore = useTeamStore()
 const { canUseBatchImage, refreshBatchImageAccess } = useBatchImageAccess()
-const canManageOwnBalance = computed(() => authStore.isAdmin || (teamStore.loaded && !teamStore.financialRestricted))
+const canManageOwnBalance = computed(() => true)
 
 onMounted(() => {
   void refreshBatchImageAccess()

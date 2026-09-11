@@ -260,7 +260,7 @@ func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscripti
 				}
 			} else {
 				// 非订阅模式 或 订阅模式但 subscriptionService 未注入：回退到余额检查
-				if apiKeyBalanceBelowAuthThreshold(apiKey.User.Balance, cfg) {
+				if apiKeyBalanceBelowAuthThresholdForMode(apiKey.User, apiKey, cfg) {
 					AbortWithError(c, 403, "INSUFFICIENT_BALANCE", "Insufficient account balance")
 					return
 				}
@@ -396,6 +396,27 @@ func setGroupContext(c *gin.Context, group *service.Group) {
 // 否则已配置该值的存量部署升级后，0 < balance < reserve 的用户会在所有端点被静默 403。
 func apiKeyBalanceBelowAuthThreshold(balance float64, _ *config.Config) bool {
 	return balance <= 0
+}
+
+// apiKeyBalanceBelowAuthThresholdForMode keeps the lightweight authentication
+// gate compatible with team members whose personal wallet is empty but whose
+// API key can spend an allocated team quota. The handler-level billing check
+// performs the precise (fresh) balance and reserve validation afterward.
+func apiKeyBalanceBelowAuthThresholdForMode(user *service.User, apiKey *service.APIKey, cfg *config.Config) bool {
+	if user == nil {
+		return true
+	}
+	if !apiKeyBalanceBelowAuthThreshold(user.Balance, cfg) {
+		return false
+	}
+	mode := service.DefaultBalanceMode
+	if apiKey != nil {
+		mode = service.NormalizeBalanceMode(apiKey.BalanceMode)
+	}
+	if mode == service.BalanceModePersonalOnly {
+		return true
+	}
+	return user.TeamBalance <= 0
 }
 
 func abortIfAPIKeyGroupUnavailable(c *gin.Context, apiKey *service.APIKey) bool {

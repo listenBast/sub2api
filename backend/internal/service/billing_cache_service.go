@@ -749,7 +749,7 @@ func (s *BillingCacheService) CheckBillingEligibility(ctx context.Context, user 
 			return err
 		}
 	} else {
-		if err := s.checkBalanceEligibility(ctx, user.ID); err != nil {
+		if err := s.checkBalanceEligibility(ctx, user, apiKey); err != nil {
 			return err
 		}
 	}
@@ -875,25 +875,81 @@ func (s *BillingCacheService) balanceBelowEligibilityThreshold(balance float64) 
 	return minimumReserve > 0 && balance < minimumReserve
 }
 
-// checkBalanceEligibility 检查余额模式资格
-func (s *BillingCacheService) checkBalanceEligibility(ctx context.Context, userID int64) error {
+// checkBalanceEligibility 检查余额模式资格。
+//
+// 团队模式（fork）：按 API Key 的扣费方式决定参与判定的资金池。
+//   - personal_only：只看缓存中的个人余额（与上游原有逻辑一致）。
+//   - team_only：只看团队额度。
+//   - team_first / personal_first：个人余额达标即放行；否则再加上团队额度一起判定。
+//
+// 团队额度不走 Redis 缓存：认证快照里的 TeamBalance 只会因划拨而增加（划拨会失效认证快照），
+// 因消费而减少。所以快照为 0 时可以直接判定没有团队额度；快照大于 0 时再读一次库拿精确值。
+// 这样只有“个人余额不足且确实持有团队额度”的成员才会触发额外的主键查询。
+func (s *BillingCacheService) checkBalanceEligibility(ctx context.Context, user *User, apiKey *APIKey) error {
+	mode := DefaultBalanceMode
+	if apiKey != nil {
+		mode = NormalizeBalanceMode(apiKey.BalanceMode)
+	}
+	userID := user.ID
+
+	if mode == BalanceModeTeamOnly {
+		teamBalance, err := s.resolveTeamBalance(ctx, user)
+		if err != nil {
+			return s.balanceCheckFailure(userID, err)
+		}
+		if s.circuitBreaker != nil {
+			s.circuitBreaker.OnSuccess()
+		}
+		if s.balanceBelowEligibilityThreshold(teamBalance) {
+			return ErrInsufficientBalance
+		}
+		return nil
+	}
+
 	balance, err := s.GetUserBalance(ctx, userID)
 	if err != nil {
-		if s.circuitBreaker != nil {
-			s.circuitBreaker.OnFailure(err)
-		}
-		logger.LegacyPrintf("service.billing_cache", "ALERT: billing balance check failed for user %d: %v", userID, err)
-		return ErrBillingServiceUnavailable.WithCause(err)
+		return s.balanceCheckFailure(userID, err)
 	}
 	if s.circuitBreaker != nil {
 		s.circuitBreaker.OnSuccess()
 	}
 
-	if s.balanceBelowEligibilityThreshold(balance) {
+	if !s.balanceBelowEligibilityThreshold(balance) {
+		return nil
+	}
+	if mode == BalanceModePersonalOnly {
 		return ErrInsufficientBalance
 	}
 
+	// 个人余额不足：团队成员还可以用团队额度兜底。
+	teamBalance, err := s.resolveTeamBalance(ctx, user)
+	if err != nil {
+		return s.balanceCheckFailure(userID, err)
+	}
+	if s.balanceBelowEligibilityThreshold(balance + teamBalance) {
+		return ErrInsufficientBalance
+	}
 	return nil
+}
+
+func (s *BillingCacheService) balanceCheckFailure(userID int64, err error) error {
+	if s.circuitBreaker != nil {
+		s.circuitBreaker.OnFailure(err)
+	}
+	logger.LegacyPrintf("service.billing_cache", "ALERT: billing balance check failed for user %d: %v", userID, err)
+	return ErrBillingServiceUnavailable.WithCause(err)
+}
+
+// resolveTeamBalance 返回用户当前的团队额度（fork）。快照为 0 时无需读库，见 checkBalanceEligibility。
+func (s *BillingCacheService) resolveTeamBalance(ctx context.Context, user *User) (float64, error) {
+	if user == nil || user.TeamBalance <= 0 || s.userRepo == nil {
+		return 0, nil
+	}
+	fresh, err := s.userRepo.GetByID(ctx, user.ID)
+	if err != nil {
+		return 0, fmt.Errorf("get user team balance: %w", err)
+	}
+	return fresh.TeamBalance, nil
 }
 
 // checkSubscriptionEligibility 检查订阅模式资格

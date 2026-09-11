@@ -148,11 +148,28 @@ func postUsageBilling(ctx context.Context, p *postUsageBillingParams, deps *bill
 		}
 	} else {
 		if cost.ActualCost > 0 {
-			if err := deps.userRepo.DeductBalance(billingCtx, p.User.ID, cost.ActualCost); err != nil {
+			var err error
+			mode := DefaultBalanceMode
+			if p.APIKey != nil {
+				mode = NormalizeBalanceMode(p.APIKey.BalanceMode)
+			}
+			if deductor, ok := deps.userRepo.(BalanceModeDeductor); ok {
+				_, err = deductor.DeductBalanceByMode(billingCtx, p.User.ID, cost.ActualCost, mode)
+			} else {
+				err = deps.userRepo.DeductBalance(billingCtx, p.User.ID, cost.ActualCost)
+			}
+			if err != nil {
 				slog.Error("deduct balance failed", "user_id", p.User.ID, "error", err)
-			} else if deps.billingCacheService != nil {
-				if err := deps.billingCacheService.InvalidateUserBalance(billingCtx, p.User.ID); err != nil {
-					slog.Warn("invalidate balance cache after legacy deduction failed", "user_id", p.User.ID, "error", err)
+			} else {
+				if deps.billingCacheService != nil {
+					if err := deps.billingCacheService.InvalidateUserBalance(billingCtx, p.User.ID); err != nil {
+						slog.Warn("invalidate balance cache after legacy deduction failed", "user_id", p.User.ID, "error", err)
+					}
+				}
+				if invalidator, ok := p.APIKeyService.(interface {
+					InvalidateAuthCacheByUserID(context.Context, int64)
+				}); ok {
+					invalidator.InvalidateAuthCacheByUserID(billingCtx, p.User.ID)
 				}
 			}
 		}
@@ -315,6 +332,8 @@ func buildUsageBillingCommand(requestID string, usageLog *UsageLog, p *postUsage
 		cmd.SubscriptionCost = p.Cost.ActualCost
 	} else if p.Cost.ActualCost > 0 {
 		cmd.BalanceCost = p.Cost.ActualCost
+		// 团队模式（fork）：按 API Key 的扣费方式在个人余额与团队额度之间拆分扣费。
+		cmd.BalanceMode = NormalizeBalanceMode(p.APIKey.BalanceMode)
 	}
 
 	if p.shouldDeductAPIKeyQuota() {
@@ -376,6 +395,22 @@ func finalizePostUsageBilling(ctx context.Context, p *postUsageBillingParams, de
 		}
 	} else if p.Cost.ActualCost > 0 && p.User != nil {
 		syncBalanceCacheAfterDeduction(ctx, p, deps, result)
+		// Team quota is intentionally not mirrored in the ordinary balance
+		// cache. Rebuild the API-key auth snapshot after a team-funded charge so
+		// the next preflight observes the current team quota immediately (and
+		// does not retain a stale positive snapshot after it reaches zero).
+		if result != nil && result.TeamBalanceCost > 0 {
+			if invalidator, ok := p.APIKeyService.(interface {
+				InvalidateAuthCacheByUserID(context.Context, int64)
+			}); ok && p.User != nil {
+				// A team allocation is shared by every key owned by the member;
+				// invalidate by user so another key cannot retain a stale quota
+				// snapshot after this charge.
+				invalidator.InvalidateAuthCacheByUserID(ctx, p.User.ID)
+			} else if invalidator, ok := p.APIKeyService.(apiKeyAuthCacheInvalidator); ok && p.APIKey != nil && p.APIKey.Key != "" {
+				invalidator.InvalidateAuthCacheByKey(ctx, p.APIKey.Key)
+			}
+		}
 	}
 
 	if p.Cost.ActualCost > 0 && p.APIKey != nil && p.APIKey.HasRateLimits() {
@@ -439,7 +474,16 @@ func syncBalanceCacheAfterDeduction(ctx context.Context, p *postUsageBillingPara
 		}
 		return
 	}
-	deps.billingCacheService.QueueDeductBalance(p.User.ID, p.Cost.ActualCost)
+	// 团队模式（fork）：余额缓存只跟踪个人余额，团队额度部分不入缓存。
+	// 有事务结果时以实际扣到个人余额的金额为准；无结果（legacy 路径）时退回全额。
+	personalCost := p.Cost.ActualCost
+	if result != nil && (result.PersonalBalanceCost > 0 || result.TeamBalanceCost > 0) {
+		personalCost = result.PersonalBalanceCost
+	}
+	if personalCost <= 0 {
+		return
+	}
+	deps.billingCacheService.QueueDeductBalance(p.User.ID, personalCost)
 }
 
 // notifyBalanceLow sends balance low notification after deduction.
@@ -461,23 +505,36 @@ func notifyBalanceLow(p *postUsageBillingParams, deps *billingDeps, result *Usag
 		return
 	}
 
+	personalCost := p.Cost.ActualCost
+	if result != nil && result.NewTeamBalance != nil {
+		personalCost = result.PersonalBalanceCost
+	}
+	if personalCost <= 0 {
+		return
+	}
 	oldBalance := resolveOldBalance(p, result)
 	slog.Debug("notifyBalanceLow: calling CheckBalanceAfterDeduction",
 		"user_id", p.User.ID,
 		"old_balance", oldBalance,
-		"cost", p.Cost.ActualCost,
+		"cost", personalCost,
 		"notify_enabled", p.User.BalanceNotifyEnabled,
 		"threshold", p.User.BalanceNotifyThreshold,
 		"result_has_new_balance", result != nil && result.NewBalance != nil,
 	)
-	deps.balanceNotifyService.CheckBalanceAfterDeduction(context.Background(), p.User, oldBalance, p.Cost.ActualCost)
+	deps.balanceNotifyService.CheckBalanceAfterDeduction(context.Background(), p.User, oldBalance, personalCost)
 }
 
-// resolveOldBalance returns the pre-deduction balance.
-// Prefers the DB transaction result (newBalance + cost) over snapshot.
+// resolveOldBalance returns the pre-deduction personal balance.
+// When a team split is present, only the personal share belongs in the
+// notification calculation; a team-only charge must not make a member look
+// as if their personal wallet was spent.
 func resolveOldBalance(p *postUsageBillingParams, result *UsageBillingApplyResult) float64 {
 	if result != nil && result.NewBalance != nil {
-		return *result.NewBalance + p.Cost.ActualCost
+		personalCost := p.Cost.ActualCost
+		if result.NewTeamBalance != nil {
+			personalCost = result.PersonalBalanceCost
+		}
+		return *result.NewBalance + personalCost
 	}
 	// Legacy fallback: snapshot balance from request context
 	return p.User.Balance

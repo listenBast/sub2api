@@ -9,6 +9,15 @@ const messages: Record<string, string> = {
   'team.cancelInvite': '撤销邀请',
   'team.remove': '踢出团队',
   'team.editRemark': '修改备注',
+  'team.transferOwner': '转为主账号',
+  'team.memberSummaryTitle': '成员汇总',
+  'team.memberSummaryHint': '按当前筛选条件统计',
+  'team.availableBalance': '可用总额',
+  'team.personalBalance': '个人余额',
+  'team.teamQuota': '团队额度',
+  'team.totalRequests': '请求数',
+  'team.totalTokens': 'Token 数',
+  'team.actualCost': '实际消费',
   'team.ledger': '资金流水',
   'team.transactionType': '流水类型',
   'team.createdAt': '创建时间',
@@ -35,6 +44,7 @@ import type { TeamMember, TeamTransaction } from '@/api/team'
 import Pagination from '@/components/common/Pagination.vue'
 import TeamLedgerPanel from '../TeamLedgerPanel.vue'
 import TeamMemberActions from '../TeamMemberActions.vue'
+import TeamUsageSummaryCards from '../TeamUsageSummaryCards.vue'
 
 const activeMember: TeamMember = {
   membership_id: 1,
@@ -44,6 +54,8 @@ const activeMember: TeamMember = {
   remark: '',
   status: 'active',
   balance: 20,
+  team_balance: 10,
+  total_balance: 30,
   frozen_balance: 0,
   concurrency: 5,
   rpm_limit: 60,
@@ -73,9 +85,10 @@ describe('team member actions', () => {
   it('uses compact API-key-style actions without request-limit controls', async () => {
     const wrapper = mount(TeamMemberActions, { props: { member: activeMember } })
 
-    expect(wrapper.findAll('.member-action')).toHaveLength(3)
+    expect(wrapper.findAll('.member-action')).toHaveLength(4)
     expect(wrapper.text()).toContain('修改备注')
     expect(wrapper.text()).toContain('调整额度')
+    expect(wrapper.text()).toContain('转为主账号')
     expect(wrapper.text()).toContain('踢出团队')
     expect(wrapper.text()).not.toContain('请求限制')
     expect(wrapper.text()).not.toContain('并发')
@@ -140,5 +153,35 @@ describe('team balance ledger', () => {
 
     expect(wrapper.text()).toContain('-US$10.00')
     expect(wrapper.find('.text-red-600').exists()).toBe(true)
+  })
+})
+
+describe('team usage summary', () => {
+  it('renders the selected member balance and aggregate usage metrics', () => {
+    const wrapper = mount(TeamUsageSummaryCards, {
+      props: {
+        summary: {
+          user_id: 11,
+          email: 'member@example.com',
+          username: 'member',
+          role: 'member',
+          balance: 6,
+          team_balance: 14,
+          total_balance: 20,
+          requests: 3,
+          tokens: 1200,
+          total_cost: 1.2,
+          actual_cost: 0.9
+        }
+      }
+    })
+
+    expect(wrapper.get('[data-testid="team-member-usage-summary"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('成员汇总')
+    expect(wrapper.text()).toContain('member@example.com')
+    expect(wrapper.text()).toContain('请求数')
+    expect(wrapper.text()).toContain('Token 数')
+    expect(wrapper.text()).toContain('实际消费')
+    expect(wrapper.text()).toContain('20')
   })
 })

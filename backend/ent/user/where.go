@@ -95,6 +95,11 @@ func FrozenBalance(v float64) predicate.User {
 	return predicate.User(sql.FieldEQ(FieldFrozenBalance, v))
 }
 
+// TeamBalance applies equality check predicate on the "team_balance" field. It's identical to TeamBalanceEQ.
+func TeamBalance(v float64) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldTeamBalance, v))
+}
+
 // Concurrency applies equality check predicate on the "concurrency" field. It's identical to ConcurrencyEQ.
 func Concurrency(v int) predicate.User {
 	return predicate.User(sql.FieldEQ(FieldConcurrency, v))
@@ -583,6 +588,46 @@ func FrozenBalanceLT(v float64) predicate.User {
 // FrozenBalanceLTE applies the LTE predicate on the "frozen_balance" field.
 func FrozenBalanceLTE(v float64) predicate.User {
 	return predicate.User(sql.FieldLTE(FieldFrozenBalance, v))
+}
+
+// TeamBalanceEQ applies the EQ predicate on the "team_balance" field.
+func TeamBalanceEQ(v float64) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldTeamBalance, v))
+}
+
+// TeamBalanceNEQ applies the NEQ predicate on the "team_balance" field.
+func TeamBalanceNEQ(v float64) predicate.User {
+	return predicate.User(sql.FieldNEQ(FieldTeamBalance, v))
+}
+
+// TeamBalanceIn applies the In predicate on the "team_balance" field.
+func TeamBalanceIn(vs ...float64) predicate.User {
+	return predicate.User(sql.FieldIn(FieldTeamBalance, vs...))
+}
+
+// TeamBalanceNotIn applies the NotIn predicate on the "team_balance" field.
+func TeamBalanceNotIn(vs ...float64) predicate.User {
+	return predicate.User(sql.FieldNotIn(FieldTeamBalance, vs...))
+}
+
+// TeamBalanceGT applies the GT predicate on the "team_balance" field.
+func TeamBalanceGT(v float64) predicate.User {
+	return predicate.User(sql.FieldGT(FieldTeamBalance, v))
+}
+
+// TeamBalanceGTE applies the GTE predicate on the "team_balance" field.
+func TeamBalanceGTE(v float64) predicate.User {
+	return predicate.User(sql.FieldGTE(FieldTeamBalance, v))
+}
+
+// TeamBalanceLT applies the LT predicate on the "team_balance" field.
+func TeamBalanceLT(v float64) predicate.User {
+	return predicate.User(sql.FieldLT(FieldTeamBalance, v))
+}
+
+// TeamBalanceLTE applies the LTE predicate on the "team_balance" field.
+func TeamBalanceLTE(v float64) predicate.User {
+	return predicate.User(sql.FieldLTE(FieldTeamBalance, v))
 }
 
 // ConcurrencyEQ applies the EQ predicate on the "concurrency" field.

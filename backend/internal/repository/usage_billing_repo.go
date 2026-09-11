@@ -179,12 +179,17 @@ func (r *usageBillingRepository) applyUsageBillingEffects(ctx context.Context, t
 	}
 
 	if cmd.BalanceCost > 0 {
-		newBalance, sufficient, err := deductUsageBillingBalance(ctx, tx, cmd.UserID, cmd.BalanceCost)
+		deduction, err := deductUsageBillingBalance(ctx, tx, cmd.UserID, cmd.BalanceCost, cmd.BalanceMode)
 		if err != nil {
 			return err
 		}
+		newBalance := deduction.newBalance
+		newTeamBalance := deduction.newTeamBalance
 		result.NewBalance = &newBalance
-		result.BalanceOverdrafted = !sufficient
+		result.NewTeamBalance = &newTeamBalance
+		result.PersonalBalanceCost = deduction.personalPart
+		result.TeamBalanceCost = deduction.teamPart
+		result.BalanceOverdrafted = !deduction.sufficient
 	}
 
 	if cmd.APIKeyQuotaCost > 0 {
@@ -240,36 +245,73 @@ func incrementUsageBillingSubscription(ctx context.Context, tx *sql.Tx, subscrip
 	return service.ErrSubscriptionNotFound
 }
 
-func deductUsageBillingBalance(ctx context.Context, tx *sql.Tx, userID int64, amount float64) (float64, bool, error) {
-	var newBalance float64
-	err := tx.QueryRowContext(ctx, `
-		UPDATE users
-		SET balance = balance - $1,
-			updated_at = NOW()
-		WHERE id = $2 AND deleted_at IS NULL AND balance >= $1
-		RETURNING balance
-	`, amount, userID).Scan(&newBalance)
-	if err == nil {
-		return newBalance, true, nil
-	}
-	if !errors.Is(err, sql.ErrNoRows) {
-		return 0, false, err
-	}
+// usageBillingBalanceDeduction 描述一次余额扣费在个人余额与团队额度之间的拆分结果。
+type usageBillingBalanceDeduction struct {
+	newBalance     float64
+	newTeamBalance float64
+	personalPart   float64
+	teamPart       float64
+	// sufficient 为 false 表示被扣的资金池在扣费后出现了透支（与上游单资金池语义一致）。
+	sufficient bool
+}
 
-	err = tx.QueryRowContext(ctx, `
-		UPDATE users
-		SET balance = balance - $1,
-			updated_at = NOW()
-		WHERE id = $2 AND deleted_at IS NULL
-		RETURNING balance
-	`, amount, userID).Scan(&newBalance)
+// deductUsageBillingBalance 按 API Key 的扣费方式（fork：团队模式）在同一条原子 UPDATE 中
+// 拆分扣减个人余额（users.balance）与团队额度（users.team_balance）：
+//
+//	team_first      团队额度优先，剩余部分扣个人余额
+//	personal_first  个人余额优先，剩余部分扣团队额度
+//	team_only       全部扣团队额度
+//	personal_only   全部扣个人余额
+//
+// 非团队成员的所有模式都退化为只扣个人余额，避免 team_only 在独立账号上写出负的
+// team_balance。资金池不足时仍然记账（允许透支），由 sufficient=false 标记。
+func deductUsageBillingBalance(ctx context.Context, tx *sql.Tx, userID int64, amount float64, mode string) (*usageBillingBalanceDeduction, error) {
+	mode = service.NormalizeBalanceMode(mode)
+	var out usageBillingBalanceDeduction
+	err := tx.QueryRowContext(ctx, `
+		WITH current_user_row AS (
+			SELECT u.id, u.balance, COALESCE(u.team_balance, 0) AS team_balance,
+				EXISTS (
+					SELECT 1 FROM team_memberships tm
+					WHERE tm.user_id = u.id AND tm.status IN ('active', 'exit_pending')
+				) AS is_team_member
+			FROM users u
+			WHERE u.id = $2 AND u.deleted_at IS NULL
+			FOR UPDATE
+		), split AS (
+			SELECT id,
+				CASE
+					WHEN NOT is_team_member THEN 0::numeric
+					WHEN $3::text = 'personal_only' THEN 0::numeric
+					WHEN $3::text = 'team_only' THEN $1::numeric
+					WHEN $3::text = 'personal_first' THEN $1::numeric - LEAST(GREATEST(balance, 0), $1::numeric)
+					ELSE LEAST(GREATEST(team_balance, 0), $1::numeric)
+				END AS team_part
+			FROM current_user_row
+		)
+		, updated AS (
+			UPDATE users u
+			SET balance = u.balance - ($1::numeric - s.team_part),
+				team_balance = u.team_balance - s.team_part,
+				updated_at = NOW()
+			FROM split s
+			WHERE u.id = s.id
+			RETURNING u.id, u.balance, u.team_balance
+		)
+		SELECT updated.balance, updated.team_balance, split.team_part
+		FROM updated
+		JOIN split ON split.id = updated.id
+	`, amount, userID, mode).Scan(&out.newBalance, &out.newTeamBalance, &out.teamPart)
 	if errors.Is(err, sql.ErrNoRows) {
-		return 0, false, service.ErrUserNotFound
+		return nil, service.ErrUserNotFound
 	}
 	if err != nil {
-		return 0, false, err
+		return nil, err
 	}
-	return newBalance, false, nil
+	out.teamPart = service.QuantizeUsageBillingAmount(out.teamPart)
+	out.personalPart = service.QuantizeUsageBillingAmount(amount - out.teamPart)
+	out.sufficient = (out.personalPart <= 0 || out.newBalance >= 0) && (out.teamPart <= 0 || out.newTeamBalance >= 0)
+	return &out, nil
 }
 
 func reserveUsageBillingBatchImageBalance(ctx context.Context, tx *sql.Tx, cmd *service.BatchImageBalanceHoldCommand) (*service.BatchImageBalanceHoldResult, error) {

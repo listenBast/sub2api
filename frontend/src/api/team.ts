@@ -19,7 +19,12 @@ export interface TeamMember {
   username: string
   remark: string
   status: TeamMembershipStatus
+  /** 成员个人余额（自己充值/兑换所得） */
   balance: number
+  /** 主账号分配的团队额度 */
+  team_balance: number
+  /** 个人余额 + 团队额度 */
+  total_balance: number
   frozen_balance: number
   concurrency: number
   rpm_limit: number
@@ -131,13 +136,41 @@ export interface TeamUsageParams {
   end_date?: string
 }
 
+export interface TeamMemberUsageSummary {
+  user_id: number
+  email: string
+  username: string
+  remark?: string
+  role: 'owner' | 'member'
+  balance: number
+  team_balance: number
+  total_balance: number
+  requests: number
+  tokens: number
+  total_cost: number
+  actual_cost: number
+}
+
+export function normalizeTeamMember(member: TeamMember): TeamMember {
+  const balance = member.balance ?? 0
+  const teamBalance = member.team_balance ?? 0
+  return {
+    ...member,
+    balance,
+    team_balance: teamBalance,
+    total_balance: member.total_balance ?? balance + teamBalance
+  }
+}
+
 export function normalizeTeamSummary(team: TeamSummary): TeamSummary {
-  return { ...team, members: team.members ?? [] }
+  return { ...team, members: (team.members ?? []).map(normalizeTeamMember) }
 }
 
 export function normalizeTeamContext(context: TeamContext): TeamContext {
-  if (!context.team) return context
-  return { ...context, team: normalizeTeamSummary(context.team) }
+  const normalized: TeamContext = { ...context }
+  if (context.team) normalized.team = normalizeTeamSummary(context.team)
+  if (context.current_membership) normalized.current_membership = normalizeTeamMember(context.current_membership)
+  return normalized
 }
 
 export async function getContext(): Promise<TeamContext> {
@@ -197,6 +230,12 @@ export async function dissolve(): Promise<void> {
   await apiClient.delete('/team')
 }
 
+/** 主账号把主账号身份转移给指定成员，自己降为普通成员。 */
+export async function transferOwnership(memberId: number): Promise<TeamContext> {
+  const { data } = await apiClient.post<TeamContext>('/team/transfer-owner', { member_id: memberId })
+  return normalizeTeamContext(data)
+}
+
 export async function getDashboard(params: { start_date?: string; end_date?: string } = {}): Promise<TeamDashboard> {
   const { data } = await apiClient.get<TeamDashboard>('/team/dashboard', { params })
   return data
@@ -204,6 +243,11 @@ export async function getDashboard(params: { start_date?: string; end_date?: str
 
 export async function listUsage(params: TeamUsageParams): Promise<PaginatedResponse<TeamUsageItem>> {
   const { data } = await apiClient.get<PaginatedResponse<TeamUsageItem>>('/team/usage', { params })
+  return data
+}
+
+export async function getUsageSummary(params: TeamUsageParams): Promise<TeamMemberUsageSummary> {
+  const { data } = await apiClient.get<TeamMemberUsageSummary>('/team/usage/summary', { params })
   return data
 }
 
@@ -249,12 +293,21 @@ export const adminTeamsAPI = {
     const { data } = await apiClient.patch<TeamMember>(`/admin/teams/${teamId}/members/${memberId}/remark`, { remark })
     return data
   },
+  /** 管理员把团队主账号更换为指定的已加入成员。 */
+  async transferOwner(teamId: number, memberId: number): Promise<TeamSummary> {
+    const { data } = await apiClient.put<TeamSummary>(`/admin/teams/${teamId}/owner`, { member_id: memberId })
+    return normalizeTeamSummary(data)
+  },
   async dashboard(teamId: number, params: { start_date?: string; end_date?: string } = {}): Promise<TeamDashboard> {
     const { data } = await apiClient.get<TeamDashboard>(`/admin/teams/${teamId}/dashboard`, { params })
     return data
   },
   async usage(teamId: number, params: TeamUsageParams): Promise<PaginatedResponse<TeamUsageItem>> {
     const { data } = await apiClient.get<PaginatedResponse<TeamUsageItem>>(`/admin/teams/${teamId}/usage`, { params })
+    return data
+  },
+  async usageSummary(teamId: number, params: TeamUsageParams): Promise<TeamMemberUsageSummary> {
+    const { data } = await apiClient.get<TeamMemberUsageSummary>(`/admin/teams/${teamId}/usage/summary`, { params })
     return data
   },
   async transactions(teamId: number, page = 1, pageSize = 20): Promise<PaginatedResponse<TeamTransaction>> {
@@ -278,7 +331,9 @@ export default {
   updateMemberRemark,
   updateMemberLimits,
   dissolve,
+  transferOwnership,
   getDashboard,
   listUsage,
+  getUsageSummary,
   listTransactions
 }

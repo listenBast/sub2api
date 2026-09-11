@@ -148,8 +148,10 @@ func registerTeamRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		teams.POST("/:id/members", h.Admin.Team.AddMember)
 		teams.PATCH("/:id/members/:member_id/remark", h.Admin.Team.UpdateMemberRemark)
 		teams.DELETE("/:id/members/:member_id", h.Admin.Team.RemoveMember)
+		teams.PUT("/:id/owner", h.Admin.Team.TransferOwnership)
 		teams.GET("/:id/dashboard", h.Admin.Team.Dashboard)
 		teams.GET("/:id/usage", h.Admin.Team.Usage)
+		teams.GET("/:id/usage/summary", h.Admin.Team.UsageSummary)
 		teams.GET("/:id/transactions", h.Admin.Team.Transactions)
 	}
 }

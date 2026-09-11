@@ -16,6 +16,7 @@ type User struct {
 	Role          string     `json:"role"`
 	Balance       float64    `json:"balance"`
 	FrozenBalance float64    `json:"frozen_balance"`
+	TeamBalance   float64    `json:"team_balance"` // 团队模式：主账号分配的团队额度（fork）
 	Concurrency   int        `json:"concurrency"`
 	Status        string     `json:"status"`
 	AllowedGroups []int64    `json:"allowed_groups"`
@@ -71,6 +72,9 @@ type APIKey struct {
 	UpdatedAt   time.Time  `json:"updated_at"`
 	// CurrentConcurrency is the real-time active request count for this API key.
 	CurrentConcurrency int `json:"current_concurrency"`
+
+	// BalanceMode 团队成员扣费方式（fork）
+	BalanceMode string `json:"balance_mode"`
 
 	// Rate limit fields
 	RateLimit5h   float64    `json:"rate_limit_5h"`

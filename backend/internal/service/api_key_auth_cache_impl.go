@@ -14,7 +14,9 @@ import (
 	"github.com/dgraph-io/ristretto"
 )
 
-const apiKeyAuthSnapshotVersion = 24 // v24: group model_allowlist field (renamed from models_list_config, enforcing semantics)
+// 注意（fork）：上游每次递增该版本号时，合并后需要保留 +100 的偏移，
+// 确保二开新增的 balance_mode / team_balance 字段总能触发快照重建。
+const apiKeyAuthSnapshotVersion = 124 // v24: group model_allowlist field (renamed from models_list_config, enforcing semantics); +100 fork: api key balance_mode + user team_balance
 
 type apiKeyAuthCacheConfig struct {
 	l1Size        int
@@ -350,11 +352,13 @@ func (s *APIKeyService) snapshotFromAPIKey(ctx context.Context, apiKey *APIKey) 
 		RateLimit5h: apiKey.RateLimit5h,
 		RateLimit1d: apiKey.RateLimit1d,
 		RateLimit7d: apiKey.RateLimit7d,
+		BalanceMode: NormalizeBalanceMode(apiKey.BalanceMode),
 		User: APIKeyAuthUserSnapshot{
 			ID:                         apiKey.User.ID,
 			Status:                     apiKey.User.Status,
 			Role:                       apiKey.User.Role,
 			Balance:                    apiKey.User.Balance,
+			TeamBalance:                apiKey.User.TeamBalance,
 			Concurrency:                apiKey.User.Concurrency,
 			AllowedGroups:              apiKey.User.AllowedGroups,
 			Email:                      apiKey.User.Email,
@@ -459,11 +463,13 @@ func (s *APIKeyService) snapshotToAPIKey(key string, snapshot *APIKeyAuthSnapsho
 		RateLimit5h: snapshot.RateLimit5h,
 		RateLimit1d: snapshot.RateLimit1d,
 		RateLimit7d: snapshot.RateLimit7d,
+		BalanceMode: NormalizeBalanceMode(snapshot.BalanceMode),
 		User: &User{
 			ID:                         snapshot.User.ID,
 			Status:                     snapshot.User.Status,
 			Role:                       snapshot.User.Role,
 			Balance:                    snapshot.User.Balance,
+			TeamBalance:                snapshot.User.TeamBalance,
 			Concurrency:                snapshot.User.Concurrency,
 			AllowedGroups:              snapshot.User.AllowedGroups,
 			Email:                      snapshot.User.Email,

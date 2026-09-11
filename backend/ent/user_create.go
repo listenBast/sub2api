@@ -132,6 +132,20 @@ func (_c *UserCreate) SetNillableFrozenBalance(v *float64) *UserCreate {
 	return _c
 }
 
+// SetTeamBalance sets the "team_balance" field.
+func (_c *UserCreate) SetTeamBalance(v float64) *UserCreate {
+	_c.mutation.SetTeamBalance(v)
+	return _c
+}
+
+// SetNillableTeamBalance sets the "team_balance" field if the given value is not nil.
+func (_c *UserCreate) SetNillableTeamBalance(v *float64) *UserCreate {
+	if v != nil {
+		_c.SetTeamBalance(*v)
+	}
+	return _c
+}
+
 // SetConcurrency sets the "concurrency" field.
 func (_c *UserCreate) SetConcurrency(v int) *UserCreate {
 	_c.mutation.SetConcurrency(v)
@@ -666,6 +680,10 @@ func (_c *UserCreate) defaults() error {
 		v := user.DefaultFrozenBalance
 		_c.mutation.SetFrozenBalance(v)
 	}
+	if _, ok := _c.mutation.TeamBalance(); !ok {
+		v := user.DefaultTeamBalance
+		_c.mutation.SetTeamBalance(v)
+	}
 	if _, ok := _c.mutation.Concurrency(); !ok {
 		v := user.DefaultConcurrency
 		_c.mutation.SetConcurrency(v)
@@ -754,6 +772,9 @@ func (_c *UserCreate) check() error {
 	}
 	if _, ok := _c.mutation.FrozenBalance(); !ok {
 		return &ValidationError{Name: "frozen_balance", err: errors.New(`ent: missing required field "User.frozen_balance"`)}
+	}
+	if _, ok := _c.mutation.TeamBalance(); !ok {
+		return &ValidationError{Name: "team_balance", err: errors.New(`ent: missing required field "User.team_balance"`)}
 	}
 	if _, ok := _c.mutation.Concurrency(); !ok {
 		return &ValidationError{Name: "concurrency", err: errors.New(`ent: missing required field "User.concurrency"`)}
@@ -864,6 +885,10 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.FrozenBalance(); ok {
 		_spec.SetField(user.FieldFrozenBalance, field.TypeFloat64, value)
 		_node.FrozenBalance = value
+	}
+	if value, ok := _c.mutation.TeamBalance(); ok {
+		_spec.SetField(user.FieldTeamBalance, field.TypeFloat64, value)
+		_node.TeamBalance = value
 	}
 	if value, ok := _c.mutation.Concurrency(); ok {
 		_spec.SetField(user.FieldConcurrency, field.TypeInt, value)
@@ -1331,6 +1356,24 @@ func (u *UserUpsert) AddFrozenBalance(v float64) *UserUpsert {
 	return u
 }
 
+// SetTeamBalance sets the "team_balance" field.
+func (u *UserUpsert) SetTeamBalance(v float64) *UserUpsert {
+	u.Set(user.FieldTeamBalance, v)
+	return u
+}
+
+// UpdateTeamBalance sets the "team_balance" field to the value that was provided on create.
+func (u *UserUpsert) UpdateTeamBalance() *UserUpsert {
+	u.SetExcluded(user.FieldTeamBalance)
+	return u
+}
+
+// AddTeamBalance adds v to the "team_balance" field.
+func (u *UserUpsert) AddTeamBalance(v float64) *UserUpsert {
+	u.Add(user.FieldTeamBalance, v)
+	return u
+}
+
 // SetConcurrency sets the "concurrency" field.
 func (u *UserUpsert) SetConcurrency(v int) *UserUpsert {
 	u.Set(user.FieldConcurrency, v)
@@ -1750,6 +1793,27 @@ func (u *UserUpsertOne) AddFrozenBalance(v float64) *UserUpsertOne {
 func (u *UserUpsertOne) UpdateFrozenBalance() *UserUpsertOne {
 	return u.Update(func(s *UserUpsert) {
 		s.UpdateFrozenBalance()
+	})
+}
+
+// SetTeamBalance sets the "team_balance" field.
+func (u *UserUpsertOne) SetTeamBalance(v float64) *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.SetTeamBalance(v)
+	})
+}
+
+// AddTeamBalance adds v to the "team_balance" field.
+func (u *UserUpsertOne) AddTeamBalance(v float64) *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.AddTeamBalance(v)
+	})
+}
+
+// UpdateTeamBalance sets the "team_balance" field to the value that was provided on create.
+func (u *UserUpsertOne) UpdateTeamBalance() *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateTeamBalance()
 	})
 }
 
@@ -2381,6 +2445,27 @@ func (u *UserUpsertBulk) AddFrozenBalance(v float64) *UserUpsertBulk {
 func (u *UserUpsertBulk) UpdateFrozenBalance() *UserUpsertBulk {
 	return u.Update(func(s *UserUpsert) {
 		s.UpdateFrozenBalance()
+	})
+}
+
+// SetTeamBalance sets the "team_balance" field.
+func (u *UserUpsertBulk) SetTeamBalance(v float64) *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.SetTeamBalance(v)
+	})
+}
+
+// AddTeamBalance adds v to the "team_balance" field.
+func (u *UserUpsertBulk) AddTeamBalance(v float64) *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.AddTeamBalance(v)
+	})
+}
+
+// UpdateTeamBalance sets the "team_balance" field to the value that was provided on create.
+func (u *UserUpsertBulk) UpdateTeamBalance() *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateTeamBalance()
 	})
 }
 

@@ -52,7 +52,7 @@ func (s *TeamService) GetContext(ctx context.Context, userID int64) (*TeamContex
 	return &TeamContext{
 		Role:                role,
 		MembershipStatus:    membership.Status,
-		FinancialRestricted: membership.Status == TeamMembershipActive || membership.Status == TeamMembershipExitPending,
+		FinancialRestricted: false,
 		Team:                &summary,
 		CurrentMembership:   &member,
 	}, nil
@@ -218,19 +218,31 @@ func (s *TeamService) GetAdminOverview(ctx context.Context) (*TeamAdminOverview,
 	if result.PendingInvites, err = s.client.TeamMembership.Query().Where(dbmembership.StatusEQ(TeamMembershipInvited)).Count(ctx); err != nil {
 		return nil, fmt.Errorf("count pending team invitations: %w", err)
 	}
-	var balances []struct {
+	// 团队资金 = 各主账号余额（资金池） + 各成员的团队额度；成员个人余额不属于团队资金。
+	var ownerBalances []struct {
 		Total sql.NullFloat64 `json:"total"`
 	}
-	err = s.client.User.Query().Where(dbuser.Or(
-		dbuser.HasOwnedTeam(),
-		dbuser.HasTeamMembershipWith(dbmembership.StatusIn(TeamMembershipActive, TeamMembershipExitPending)),
-	)).Aggregate(dbent.As(dbent.Sum(dbuser.FieldBalance), "total")).Scan(ctx, &balances)
+	err = s.client.User.Query().Where(dbuser.HasOwnedTeam()).
+		Aggregate(dbent.As(dbent.Sum(dbuser.FieldBalance), "total")).Scan(ctx, &ownerBalances)
 	if err != nil {
-		return nil, fmt.Errorf("sum team balances: %w", err)
+		return nil, fmt.Errorf("sum team owner balances: %w", err)
 	}
-	if len(balances) > 0 && balances[0].Total.Valid {
-		result.TotalBalance = balances[0].Total.Float64
+	if len(ownerBalances) > 0 && ownerBalances[0].Total.Valid {
+		result.TotalBalance += ownerBalances[0].Total.Float64
 	}
+	var memberBalances []struct {
+		Total sql.NullFloat64 `json:"total"`
+	}
+	err = s.client.User.Query().Where(
+		dbuser.HasTeamMembershipWith(dbmembership.StatusIn(TeamMembershipActive, TeamMembershipExitPending)),
+	).Aggregate(dbent.As(dbent.Sum(dbuser.FieldTeamBalance), "total")).Scan(ctx, &memberBalances)
+	if err != nil {
+		return nil, fmt.Errorf("sum team member balances: %w", err)
+	}
+	if len(memberBalances) > 0 && memberBalances[0].Total.Valid {
+		result.TotalBalance += memberBalances[0].Total.Float64
+	}
+	result.TotalBalance = roundTeamAmount(result.TotalBalance)
 	return result, nil
 }
 
@@ -308,6 +320,97 @@ func (s *TeamService) listTeamUsage(ctx context.Context, teamID int64, filter Te
 		})
 	}
 	return items, teamPagination(total, filter.Page, filter.PageSize), nil
+}
+
+// GetUsageSummary 主账号按成员汇总团队用量（筛选条件与用量明细一致）。
+func (s *TeamService) GetUsageSummary(ctx context.Context, ownerID int64, filter TeamUsageFilter) (*TeamMemberUsageSummary, error) {
+	teamEntity, err := s.requireOwnedTeam(ctx, ownerID, false)
+	if err != nil {
+		return nil, err
+	}
+	return s.memberUsageSummary(ctx, teamEntity, filter)
+}
+
+// GetAdminUsageSummary 管理员按成员汇总团队用量。
+func (s *TeamService) GetAdminUsageSummary(ctx context.Context, teamID int64, filter TeamUsageFilter) (*TeamMemberUsageSummary, error) {
+	teamEntity, err := s.client.Team.Get(ctx, teamID)
+	if err != nil {
+		return nil, translateTeamError(err)
+	}
+	return s.memberUsageSummary(ctx, teamEntity, filter)
+}
+
+func (s *TeamService) memberUsageSummary(ctx context.Context, teamEntity *dbent.Team, filter TeamUsageFilter) (*TeamMemberUsageSummary, error) {
+	if filter.MemberID <= 0 {
+		return nil, infraBadRequest("TEAM_MEMBER_REQUIRED", "请选择要汇总的成员")
+	}
+	userIDs, err := s.teamUsageUserIDs(ctx, teamEntity.ID)
+	if err != nil {
+		return nil, err
+	}
+	if !containsTeamUser(userIDs, filter.MemberID) {
+		return nil, ErrTeamMemberNotFound
+	}
+	user, err := s.client.User.Get(ctx, filter.MemberID)
+	if err != nil {
+		return nil, translateTeamUserError(err)
+	}
+	summary := &TeamMemberUsageSummary{
+		UserID:       user.ID,
+		Email:        user.Email,
+		Username:     user.Username,
+		Role:         TeamRoleMember,
+		Balance:      user.Balance,
+		TeamBalance:  user.TeamBalance,
+		TotalBalance: roundTeamAmount(user.Balance + user.TeamBalance),
+	}
+	if user.ID == teamEntity.OwnerID {
+		summary.Role = TeamRoleOwner
+	} else if membership, membershipErr := s.client.TeamMembership.Query().Where(
+		dbmembership.TeamIDEQ(teamEntity.ID),
+		dbmembership.UserIDEQ(user.ID),
+	).Only(ctx); membershipErr == nil {
+		summary.Remark = membership.Remark
+	}
+
+	query := s.client.UsageLog.Query().Where(dbusagelog.UserIDEQ(filter.MemberID))
+	if model := strings.TrimSpace(filter.Model); model != "" {
+		query = query.Where(dbusagelog.ModelContainsFold(model))
+	}
+	if filter.Start != nil {
+		query = query.Where(dbusagelog.CreatedAtGTE(*filter.Start))
+	}
+	if filter.End != nil {
+		query = query.Where(dbusagelog.CreatedAtLT(*filter.End))
+	}
+	var totals []struct {
+		Requests   int64           `json:"requests"`
+		Input      sql.NullFloat64 `json:"input_tokens"`
+		Output     sql.NullFloat64 `json:"output_tokens"`
+		CacheWrite sql.NullFloat64 `json:"cache_creation_tokens"`
+		CacheRead  sql.NullFloat64 `json:"cache_read_tokens"`
+		TotalCost  sql.NullFloat64 `json:"total_cost"`
+		ActualCost sql.NullFloat64 `json:"actual_cost"`
+	}
+	if err := query.Aggregate(
+		dbent.As(dbent.Count(), "requests"),
+		dbent.As(dbent.Sum(dbusagelog.FieldInputTokens), "input_tokens"),
+		dbent.As(dbent.Sum(dbusagelog.FieldOutputTokens), "output_tokens"),
+		dbent.As(dbent.Sum(dbusagelog.FieldCacheCreationTokens), "cache_creation_tokens"),
+		dbent.As(dbent.Sum(dbusagelog.FieldCacheReadTokens), "cache_read_tokens"),
+		dbent.As(dbent.Sum(dbusagelog.FieldTotalCost), "total_cost"),
+		dbent.As(dbent.Sum(dbusagelog.FieldActualCost), "actual_cost"),
+	).Scan(ctx, &totals); err != nil {
+		return nil, fmt.Errorf("aggregate team member usage: %w", err)
+	}
+	if len(totals) > 0 {
+		row := totals[0]
+		summary.Requests = row.Requests
+		summary.Tokens = int64(row.Input.Float64 + row.Output.Float64 + row.CacheWrite.Float64 + row.CacheRead.Float64)
+		summary.TotalCost = row.TotalCost.Float64
+		summary.ActualCost = row.ActualCost.Float64
+	}
+	return summary, nil
 }
 
 func (s *TeamService) GetDashboard(ctx context.Context, ownerID int64, start, end time.Time) (*TeamDashboard, error) {
@@ -470,12 +573,13 @@ func teamSummaryFromEntity(entity *dbent.Team) TeamSummary {
 		case TeamMembershipExitPending:
 			view.ActiveMemberCount++
 			view.ExitPendingCount++
-			view.TotalBalance += member.Balance
+			view.TotalBalance += member.TeamBalance
 		case TeamMembershipActive:
 			view.ActiveMemberCount++
-			view.TotalBalance += member.Balance
+			view.TotalBalance += member.TeamBalance
 		}
 	}
+	view.TotalBalance = roundTeamAmount(view.TotalBalance)
 	return view
 }
 

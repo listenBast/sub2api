@@ -190,6 +190,20 @@ func (_u *APIKeyUpdate) ClearIPBlacklist() *APIKeyUpdate {
 	return _u
 }
 
+// SetBalanceMode sets the "balance_mode" field.
+func (_u *APIKeyUpdate) SetBalanceMode(v string) *APIKeyUpdate {
+	_u.mutation.SetBalanceMode(v)
+	return _u
+}
+
+// SetNillableBalanceMode sets the "balance_mode" field if the given value is not nil.
+func (_u *APIKeyUpdate) SetNillableBalanceMode(v *string) *APIKeyUpdate {
+	if v != nil {
+		_u.SetBalanceMode(*v)
+	}
+	return _u
+}
+
 // SetQuota sets the "quota" field.
 func (_u *APIKeyUpdate) SetQuota(v float64) *APIKeyUpdate {
 	_u.mutation.ResetQuota()
@@ -560,6 +574,11 @@ func (_u *APIKeyUpdate) check() error {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "APIKey.status": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.BalanceMode(); ok {
+		if err := apikey.BalanceModeValidator(v); err != nil {
+			return &ValidationError{Name: "balance_mode", err: fmt.Errorf(`ent: validator failed for field "APIKey.balance_mode": %w`, err)}
+		}
+	}
 	if _u.mutation.UserCleared() && len(_u.mutation.UserIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "APIKey.user"`)
 	}
@@ -623,6 +642,9 @@ func (_u *APIKeyUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if _u.mutation.IPBlacklistCleared() {
 		_spec.ClearField(apikey.FieldIPBlacklist, field.TypeJSON)
+	}
+	if value, ok := _u.mutation.BalanceMode(); ok {
+		_spec.SetField(apikey.FieldBalanceMode, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.Quota(); ok {
 		_spec.SetField(apikey.FieldQuota, field.TypeFloat64, value)
@@ -974,6 +996,20 @@ func (_u *APIKeyUpdateOne) AppendIPBlacklist(v []string) *APIKeyUpdateOne {
 // ClearIPBlacklist clears the value of the "ip_blacklist" field.
 func (_u *APIKeyUpdateOne) ClearIPBlacklist() *APIKeyUpdateOne {
 	_u.mutation.ClearIPBlacklist()
+	return _u
+}
+
+// SetBalanceMode sets the "balance_mode" field.
+func (_u *APIKeyUpdateOne) SetBalanceMode(v string) *APIKeyUpdateOne {
+	_u.mutation.SetBalanceMode(v)
+	return _u
+}
+
+// SetNillableBalanceMode sets the "balance_mode" field if the given value is not nil.
+func (_u *APIKeyUpdateOne) SetNillableBalanceMode(v *string) *APIKeyUpdateOne {
+	if v != nil {
+		_u.SetBalanceMode(*v)
+	}
 	return _u
 }
 
@@ -1360,6 +1396,11 @@ func (_u *APIKeyUpdateOne) check() error {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "APIKey.status": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.BalanceMode(); ok {
+		if err := apikey.BalanceModeValidator(v); err != nil {
+			return &ValidationError{Name: "balance_mode", err: fmt.Errorf(`ent: validator failed for field "APIKey.balance_mode": %w`, err)}
+		}
+	}
 	if _u.mutation.UserCleared() && len(_u.mutation.UserIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "APIKey.user"`)
 	}
@@ -1440,6 +1481,9 @@ func (_u *APIKeyUpdateOne) sqlSave(ctx context.Context) (_node *APIKey, err erro
 	}
 	if _u.mutation.IPBlacklistCleared() {
 		_spec.ClearField(apikey.FieldIPBlacklist, field.TypeJSON)
+	}
+	if value, ok := _u.mutation.BalanceMode(); ok {
+		_spec.SetField(apikey.FieldBalanceMode, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.Quota(); ok {
 		_spec.SetField(apikey.FieldQuota, field.TypeFloat64, value)

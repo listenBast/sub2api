@@ -55,7 +55,8 @@ func (r *apiKeyRepository) Create(ctx context.Context, key *service.APIKey) erro
 		SetNillableExpiresAt(key.ExpiresAt).
 		SetRateLimit5h(key.RateLimit5h).
 		SetRateLimit1d(key.RateLimit1d).
-		SetRateLimit7d(key.RateLimit7d)
+		SetRateLimit7d(key.RateLimit7d).
+		SetBalanceMode(service.NormalizeBalanceMode(key.BalanceMode))
 
 	if len(key.IPWhitelist) > 0 {
 		builder.SetIPWhitelist(key.IPWhitelist)
@@ -144,6 +145,7 @@ func (r *apiKeyRepository) GetByKeyForAuth(ctx context.Context, key string) (*se
 			apikey.FieldRateLimit5h,
 			apikey.FieldRateLimit1d,
 			apikey.FieldRateLimit7d,
+			apikey.FieldBalanceMode,
 		).
 		WithUser(func(q *dbent.UserQuery) {
 			q.Select(
@@ -153,6 +155,7 @@ func (r *apiKeyRepository) GetByKeyForAuth(ctx context.Context, key string) (*se
 				user.FieldStatus,
 				user.FieldRole,
 				user.FieldBalance,
+				user.FieldTeamBalance,
 				user.FieldConcurrency,
 				user.FieldBalanceNotifyEnabled,
 				user.FieldRestrictPublicGroups,
@@ -269,6 +272,9 @@ func (r *apiKeyRepository) Update(ctx context.Context, key *service.APIKey, fiel
 	}
 	if fields.QuotaUsed {
 		builder.SetQuotaUsed(key.QuotaUsed)
+	}
+	if fields.BalanceMode {
+		builder.SetBalanceMode(service.NormalizeBalanceMode(key.BalanceMode))
 	}
 	if fields.RateLimits {
 		builder.
@@ -887,6 +893,7 @@ func apiKeyEntityToService(m *dbent.APIKey) *service.APIKey {
 		Quota:         m.Quota,
 		QuotaUsed:     m.QuotaUsed,
 		ExpiresAt:     m.ExpiresAt,
+		BalanceMode:   service.NormalizeBalanceMode(m.BalanceMode),
 		RateLimit5h:   m.RateLimit5h,
 		RateLimit1d:   m.RateLimit1d,
 		RateLimit7d:   m.RateLimit7d,
@@ -927,6 +934,7 @@ func userEntityToService(u *dbent.User) *service.User {
 		Role:                       u.Role,
 		Balance:                    u.Balance,
 		FrozenBalance:              u.FrozenBalance,
+		TeamBalance:                u.TeamBalance,
 		Concurrency:                u.Concurrency,
 		Status:                     u.Status,
 		SignupSource:               u.SignupSource,

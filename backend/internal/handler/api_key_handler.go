@@ -44,6 +44,9 @@ type CreateAPIKeyRequest struct {
 	RateLimit5h *float64 `json:"rate_limit_5h"`
 	RateLimit1d *float64 `json:"rate_limit_1d"`
 	RateLimit7d *float64 `json:"rate_limit_7d"`
+
+	// 团队成员扣费方式（fork）：team_first / personal_first / team_only / personal_only
+	BalanceMode string `json:"balance_mode" binding:"omitempty,oneof=team_first personal_first team_only personal_only"`
 }
 
 // UpdateAPIKeyRequest represents the update API key request payload
@@ -62,6 +65,9 @@ type UpdateAPIKeyRequest struct {
 	RateLimit1d         *float64 `json:"rate_limit_1d"`
 	RateLimit7d         *float64 `json:"rate_limit_7d"`
 	ResetRateLimitUsage *bool    `json:"reset_rate_limit_usage"` // 重置限速用量
+
+	// 团队成员扣费方式（fork，nil = 不修改）
+	BalanceMode *string `json:"balance_mode" binding:"omitempty,oneof=team_first personal_first team_only personal_only"`
 }
 
 func validAPIKeyLimit(v float64) bool { return !math.IsNaN(v) && !math.IsInf(v, 0) && v >= 0 }
@@ -203,6 +209,7 @@ func (h *APIKeyHandler) Create(c *gin.Context) {
 		IPWhitelist:   req.IPWhitelist,
 		IPBlacklist:   req.IPBlacklist,
 		ExpiresInDays: req.ExpiresInDays,
+		BalanceMode:   req.BalanceMode,
 	}
 	if req.Quota != nil {
 		svcReq.Quota = *req.Quota
@@ -260,6 +267,7 @@ func (h *APIKeyHandler) Update(c *gin.Context) {
 		RateLimit1d:         req.RateLimit1d,
 		RateLimit7d:         req.RateLimit7d,
 		ResetRateLimitUsage: req.ResetRateLimitUsage,
+		BalanceMode:         req.BalanceMode,
 	}
 	if req.Name != "" {
 		svcReq.Name = &req.Name

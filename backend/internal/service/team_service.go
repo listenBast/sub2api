@@ -9,7 +9,7 @@ import (
 	"time"
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
-	dbpaymentorder "github.com/Wei-Shaw/sub2api/ent/paymentorder"
+	dbapikey "github.com/Wei-Shaw/sub2api/ent/apikey"
 	dbteam "github.com/Wei-Shaw/sub2api/ent/team"
 	dbmembership "github.com/Wei-Shaw/sub2api/ent/teammembership"
 	dbuser "github.com/Wei-Shaw/sub2api/ent/user"
@@ -19,17 +19,32 @@ import (
 
 const teamBalanceEpsilon = 0.00000001
 
+// 资金模型说明（fork）：
+//
+//   - 主账号的 users.balance 就是团队资金池，主账号本人没有“团队额度”的概念。
+//   - 成员的 users.balance 是个人余额：自己充值/兑换所得，团队不会收回、也不会替成员消费之外的用途动用它。
+//   - 成员的 users.team_balance 是团队额度：由主账号从资金池划拨，成员退出/被移除/团队解散时归还资金池。
+//   - 成员每个 API Key 通过 balance_mode 决定先扣哪个资金池，见 team_balance_mode.go。
+
 // TeamService 负责团队成员生命周期和资金一致性。
 type TeamService struct {
 	client               *dbent.Client
 	sqlDB                *sql.DB
 	authCacheInvalidator APIKeyAuthCacheInvalidator
+	billingCache         *BillingCacheService
 	rowLocks             bool
 }
 
-func NewTeamService(client *dbent.Client, sqlDB *sql.DB, authCacheInvalidator APIKeyAuthCacheInvalidator) *TeamService {
+// NewTeamService keeps the billing-cache dependency optional so integrations
+// that construct TeamService directly with the historical three arguments
+// continue to compile.
+func NewTeamService(client *dbent.Client, sqlDB *sql.DB, authCacheInvalidator APIKeyAuthCacheInvalidator, billingCaches ...*BillingCacheService) *TeamService {
 	rowLocks := sqlDB == nil || !strings.Contains(strings.ToLower(fmt.Sprintf("%T", sqlDB.Driver())), "sqlite")
-	return &TeamService{client: client, sqlDB: sqlDB, authCacheInvalidator: authCacheInvalidator, rowLocks: rowLocks}
+	var billingCache *BillingCacheService
+	if len(billingCaches) > 0 {
+		billingCache = billingCaches[0]
+	}
+	return &TeamService{client: client, sqlDB: sqlDB, authCacheInvalidator: authCacheInvalidator, billingCache: billingCache, rowLocks: rowLocks}
 }
 
 func (s *TeamService) Upgrade(ctx context.Context, userID int64, name string) (*TeamContext, error) {
@@ -175,7 +190,7 @@ func (s *TeamService) Invite(ctx context.Context, ownerID int64, email string) (
 	if err != nil {
 		return nil, translateTeamUserError(err)
 	}
-	if err := createTeamTransaction(txCtx, client, teamEntity.ID, ownerID, &target.ID, TeamActionInvited, 0, owner.Balance, owner.Balance, &target.Balance, &target.Balance, ""); err != nil {
+	if err := createTeamTransaction(txCtx, client, teamEntity.ID, ownerID, &target.ID, TeamActionInvited, 0, owner.Balance, owner.Balance, &target.TeamBalance, &target.TeamBalance, ""); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -185,6 +200,7 @@ func (s *TeamService) Invite(ctx context.Context, ownerID int64, email string) (
 	return &view, nil
 }
 
+// RespondInvitation 接受或拒绝邀请。接受后成员的个人余额保持不变，团队额度从 0 开始由主账号分配。
 func (s *TeamService) RespondInvitation(ctx context.Context, userID int64, accept bool) (*TeamContext, error) {
 	tx, err := s.client.Tx(ctx)
 	if err != nil {
@@ -213,33 +229,9 @@ func (s *TeamService) RespondInvitation(ctx context.Context, userID int64, accep
 	}
 
 	action := TeamActionInviteRejected
-	amount := 0.0
-	ownerBefore := owner.Balance
-	ownerAfter := owner.Balance
-	memberBefore := member.Balance
-	memberAfter := member.Balance
 	if accept {
 		if teamEntity.Status != TeamStatusActive {
 			return nil, ErrTeamSuspended
-		}
-		if math.Abs(member.FrozenBalance) >= teamBalanceEpsilon {
-			return nil, ErrTeamFrozenBalancePending
-		}
-		pendingPayment, paymentErr := hasPendingTeamPayment(txCtx, client, userID)
-		if paymentErr != nil {
-			return nil, paymentErr
-		}
-		if pendingPayment {
-			return nil, ErrTeamPendingPayments
-		}
-		amount = roundTeamAmount(member.Balance)
-		ownerAfter = roundTeamAmount(owner.Balance + amount)
-		memberAfter = 0
-		if _, err := client.User.UpdateOneID(owner.ID).SetBalance(ownerAfter).Save(txCtx); err != nil {
-			return nil, fmt.Errorf("merge member balance into team owner: %w", err)
-		}
-		if _, err := client.User.UpdateOneID(member.ID).SetBalance(memberAfter).Save(txCtx); err != nil {
-			return nil, fmt.Errorf("clear joining member balance: %w", err)
 		}
 		now := time.Now()
 		if _, err := client.TeamMembership.UpdateOneID(membership.ID).
@@ -253,18 +245,19 @@ func (s *TeamService) RespondInvitation(ctx context.Context, userID int64, accep
 	} else if err := client.TeamMembership.DeleteOneID(membership.ID).Exec(txCtx); err != nil {
 		return nil, fmt.Errorf("reject team invitation: %w", err)
 	}
-	if err := createTeamTransaction(txCtx, client, teamEntity.ID, userID, &userID, action, amount, ownerBefore, ownerAfter, &memberBefore, &memberAfter, ""); err != nil {
+	if err := createTeamTransaction(txCtx, client, teamEntity.ID, userID, &userID, action, 0, owner.Balance, owner.Balance, &member.TeamBalance, &member.TeamBalance, ""); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("commit invitation response: %w", err)
 	}
 	if accept {
-		s.invalidateBalanceCaches(ctx, owner.ID, member.ID)
+		s.invalidateBalanceCaches(ctx, member.ID)
 	}
 	return s.GetContext(ctx, userID)
 }
 
+// AllocateBalance 主账号在资金池（自己的余额）与成员团队额度之间划拨额度；负数表示收回。
 func (s *TeamService) AllocateBalance(ctx context.Context, ownerID, memberID int64, amount float64, note string) (*TeamMemberView, error) {
 	amount = roundTeamAmount(amount)
 	if amount == 0 || math.IsNaN(amount) || math.IsInf(amount, 0) {
@@ -304,29 +297,29 @@ func (s *TeamService) AllocateBalance(ctx context.Context, ownerID, memberID int
 	if amount > 0 && owner.Balance+teamBalanceEpsilon < amount {
 		return nil, ErrTeamInsufficientBalance
 	}
-	if amount < 0 && member.Balance+teamBalanceEpsilon < -amount {
+	if amount < 0 && member.TeamBalance+teamBalanceEpsilon < -amount {
 		return nil, ErrTeamMemberInsufficientBalance
 	}
 	ownerAfter := roundTeamAmount(owner.Balance - amount)
-	memberAfter := roundTeamAmount(member.Balance + amount)
+	memberAfter := roundTeamAmount(member.TeamBalance + amount)
 	if _, err := client.User.UpdateOneID(ownerID).SetBalance(ownerAfter).Save(txCtx); err != nil {
 		return nil, fmt.Errorf("debit team owner: %w", err)
 	}
-	if _, err := client.User.UpdateOneID(memberID).SetBalance(memberAfter).Save(txCtx); err != nil {
+	if _, err := client.User.UpdateOneID(memberID).SetTeamBalance(memberAfter).Save(txCtx); err != nil {
 		return nil, fmt.Errorf("credit team member: %w", err)
 	}
 	action := TeamActionBalanceAdded
 	if amount < 0 {
 		action = TeamActionBalanceRecovered
 	}
-	if err := createTeamTransaction(txCtx, client, teamEntity.ID, ownerID, &memberID, action, amount, owner.Balance, ownerAfter, &member.Balance, &memberAfter, note); err != nil {
+	if err := createTeamTransaction(txCtx, client, teamEntity.ID, ownerID, &memberID, action, amount, owner.Balance, ownerAfter, &member.TeamBalance, &memberAfter, note); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("commit team allocation: %w", err)
 	}
 	s.invalidateBalanceCaches(ctx, ownerID, memberID)
-	member.Balance = memberAfter
+	member.TeamBalance = memberAfter
 	view := teamMemberView(membership, member)
 	return &view, nil
 }
@@ -498,7 +491,7 @@ func (s *TeamService) UpdateMemberLimits(ctx context.Context, ownerID, memberID 
 	if err != nil {
 		return nil, fmt.Errorf("update team member limits: %w", err)
 	}
-	if err := createTeamTransaction(txCtx, client, teamEntity.ID, ownerID, &memberID, TeamActionMemberLimitsUpdated, 0, owner.Balance, owner.Balance, &member.Balance, &member.Balance, strings.Join(noteParts, ", ")); err != nil {
+	if err := createTeamTransaction(txCtx, client, teamEntity.ID, ownerID, &memberID, TeamActionMemberLimitsUpdated, 0, owner.Balance, owner.Balance, &member.TeamBalance, &member.TeamBalance, strings.Join(noteParts, ", ")); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -517,6 +510,7 @@ func (s *TeamService) AdminDeleteTeam(ctx context.Context, _ int64, teamID int64
 	return s.dissolveTeam(ctx, teamID, true)
 }
 
+// dissolveTeam 解散团队：所有成员的团队额度归还主账号，成员个人余额不受影响。
 func (s *TeamService) dissolveTeam(ctx context.Context, ownerOrTeamID int64, admin bool) error {
 	tx, err := s.client.Tx(ctx)
 	if err != nil {
@@ -577,17 +571,17 @@ func (s *TeamService) dissolveTeam(ctx context.Context, ownerOrTeamID int64, adm
 		if user.ID == ownerID {
 			continue
 		}
-		if math.Abs(user.FrozenBalance) >= teamBalanceEpsilon {
-			return ErrTeamFrozenBalancePending
-		}
-		ownerAfter = roundTeamAmount(ownerAfter + user.Balance)
+		ownerAfter = roundTeamAmount(ownerAfter + user.TeamBalance)
 	}
 	if _, err := client.User.UpdateOneID(ownerID).SetBalance(ownerAfter).Save(txCtx); err != nil {
 		return fmt.Errorf("return team balances to owner: %w", err)
 	}
 	for _, memberID := range memberIDs {
-		if _, err := client.User.UpdateOneID(memberID).SetBalance(0).Save(txCtx); err != nil {
+		if _, err := client.User.UpdateOneID(memberID).SetTeamBalance(0).Save(txCtx); err != nil {
 			return fmt.Errorf("clear dissolved team member balance: %w", err)
+		}
+		if err := resetTeamOnlyAPIKeys(txCtx, client, memberID); err != nil {
+			return err
 		}
 	}
 	if err := client.Team.DeleteOneID(teamEntity.ID).Exec(txCtx); err != nil {
@@ -651,6 +645,7 @@ func (s *TeamService) AdminCreateTeam(ctx context.Context, adminID int64, ownerE
 	return s.GetAdminTeam(ctx, teamEntity.ID)
 }
 
+// AdminAddMember 管理员直接添加成员：不再收回成员个人余额，团队额度从 0 开始。
 func (s *TeamService) AdminAddMember(ctx context.Context, adminID, teamID int64, email, remark string) (*TeamMemberView, error) {
 	email = strings.TrimSpace(email)
 	remark = strings.TrimSpace(remark)
@@ -706,25 +701,6 @@ func (s *TeamService) AdminAddMember(ctx context.Context, adminID, teamID int64,
 	if owned || membershipExists {
 		return nil, ErrTeamMemberExists
 	}
-	if math.Abs(member.FrozenBalance) >= teamBalanceEpsilon {
-		return nil, ErrTeamFrozenBalancePending
-	}
-	pendingPayment, err := hasPendingTeamPayment(txCtx, client, member.ID)
-	if err != nil {
-		return nil, err
-	}
-	if pendingPayment {
-		return nil, ErrTeamPendingPayments
-	}
-	memberBefore := member.Balance
-	memberAfter := 0.0
-	ownerAfter := roundTeamAmount(owner.Balance + memberBefore)
-	if _, err := client.User.UpdateOneID(owner.ID).SetBalance(ownerAfter).Save(txCtx); err != nil {
-		return nil, fmt.Errorf("合并成员余额到主账号失败: %w", err)
-	}
-	if _, err := client.User.UpdateOneID(member.ID).SetBalance(memberAfter).Save(txCtx); err != nil {
-		return nil, fmt.Errorf("清空新成员原余额失败: %w", err)
-	}
 	now := time.Now()
 	membership, err := client.TeamMembership.Create().
 		SetTeamID(teamID).
@@ -737,18 +713,18 @@ func (s *TeamService) AdminAddMember(ctx context.Context, adminID, teamID int64,
 	if err != nil {
 		return nil, fmt.Errorf("添加团队成员失败: %w", err)
 	}
-	if err := createTeamTransaction(txCtx, client, teamID, adminID, &member.ID, TeamActionAdminMemberAdded, memberBefore, owner.Balance, ownerAfter, &memberBefore, &memberAfter, "管理员直接添加成员"); err != nil {
+	if err := createTeamTransaction(txCtx, client, teamID, adminID, &member.ID, TeamActionAdminMemberAdded, 0, owner.Balance, owner.Balance, &member.TeamBalance, &member.TeamBalance, "管理员直接添加成员"); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("提交管理员添加成员事务失败: %w", err)
 	}
-	s.invalidateBalanceCaches(ctx, owner.ID, member.ID)
-	member.Balance = memberAfter
+	s.invalidateBalanceCaches(ctx, member.ID)
 	view := teamMemberView(membership, member)
 	return &view, nil
 }
 
+// reclaimAndRemove 移除成员（或批准退出）：成员的团队额度归还主账号，个人余额不受影响。
 func (s *TeamService) reclaimAndRemove(ctx context.Context, ownerOrTeamID, memberID, operatorID int64, action string, admin bool) error {
 	tx, err := s.client.Tx(ctx)
 	if err != nil {
@@ -807,21 +783,21 @@ func (s *TeamService) reclaimAndRemove(ctx context.Context, ownerOrTeamID, membe
 	if err != nil {
 		return err
 	}
-	if math.Abs(member.FrozenBalance) >= teamBalanceEpsilon {
-		return ErrTeamFrozenBalancePending
-	}
-	ownerAfter := roundTeamAmount(owner.Balance + member.Balance)
+	ownerAfter := roundTeamAmount(owner.Balance + member.TeamBalance)
 	memberAfter := 0.0
 	if _, err := client.User.UpdateOneID(owner.ID).SetBalance(ownerAfter).Save(txCtx); err != nil {
 		return fmt.Errorf("return member balance to owner: %w", err)
 	}
-	if _, err := client.User.UpdateOneID(member.ID).SetBalance(memberAfter).Save(txCtx); err != nil {
-		return fmt.Errorf("clear member balance: %w", err)
+	if _, err := client.User.UpdateOneID(member.ID).SetTeamBalance(memberAfter).Save(txCtx); err != nil {
+		return fmt.Errorf("clear member team balance: %w", err)
+	}
+	if err := resetTeamOnlyAPIKeys(txCtx, client, member.ID); err != nil {
+		return err
 	}
 	if err := client.TeamMembership.DeleteOneID(membership.ID).Exec(txCtx); err != nil {
 		return fmt.Errorf("remove team membership: %w", err)
 	}
-	if err := createTeamTransaction(txCtx, client, teamEntity.ID, operatorID, &memberID, action, member.Balance, owner.Balance, ownerAfter, &member.Balance, &memberAfter, ""); err != nil {
+	if err := createTeamTransaction(txCtx, client, teamEntity.ID, operatorID, &memberID, action, member.TeamBalance, owner.Balance, ownerAfter, &member.TeamBalance, &memberAfter, ""); err != nil {
 		return err
 	}
 	if err := tx.Commit(); err != nil {
@@ -829,6 +805,123 @@ func (s *TeamService) reclaimAndRemove(ctx context.Context, ownerOrTeamID, membe
 	}
 	s.invalidateBalanceCaches(ctx, owner.ID, member.ID)
 	return nil
+}
+
+// TransferOwnership 主账号把主账号身份转移给一名已加入的成员，自己降为普通成员。
+func (s *TeamService) TransferOwnership(ctx context.Context, ownerID, newOwnerID int64) (*TeamContext, error) {
+	if _, err := s.transferOwnership(ctx, ownerID, newOwnerID, ownerID, false); err != nil {
+		return nil, err
+	}
+	return s.GetContext(ctx, ownerID)
+}
+
+// AdminTransferOwnership 管理员把团队主账号更换为指定的已加入成员。
+func (s *TeamService) AdminTransferOwnership(ctx context.Context, adminID, teamID, newOwnerID int64) (*TeamSummary, error) {
+	if _, err := s.transferOwnership(ctx, teamID, newOwnerID, adminID, true); err != nil {
+		return nil, err
+	}
+	return s.GetAdminTeam(ctx, teamID)
+}
+
+// transferOwnership 转移主账号。资金处理规则：
+//
+//   - 原主账号的余额就是团队资金池，整体转入新主账号；原主账号成为成员后个人余额为 0、团队额度为 0。
+//   - 新主账号此前获得的团队额度并回资金池，其个人余额也一并成为资金池（主账号只有一个余额）。
+//   - 新主账号名下 team_only 的 API Key 改为 team_first，避免主账号继续按“仅团队额度”扣费。
+//
+// 返回新主账号 ID。
+func (s *TeamService) transferOwnership(ctx context.Context, ownerOrTeamID, newOwnerID, operatorID int64, admin bool) (int64, error) {
+	tx, err := s.client.Tx(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("begin owner transfer transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	txCtx := dbent.NewTxContext(ctx, tx)
+	client := tx.Client()
+
+	teamQuery := client.Team.Query()
+	if admin {
+		teamQuery = teamQuery.Where(dbteam.IDEQ(ownerOrTeamID))
+	} else {
+		teamQuery = teamQuery.Where(dbteam.OwnerIDEQ(ownerOrTeamID))
+	}
+	teamEntity, err := s.lockTeamQuery(teamQuery).Only(txCtx)
+	if err != nil {
+		return 0, translateTeamError(err)
+	}
+	if !admin && teamEntity.Status != TeamStatusActive {
+		return 0, ErrTeamSuspended
+	}
+	oldOwnerID := teamEntity.OwnerID
+	if newOwnerID == oldOwnerID {
+		return 0, ErrTeamOwnerTransferTarget
+	}
+	membership, err := s.lockMembershipQuery(client.TeamMembership.Query().Where(
+		dbmembership.TeamIDEQ(teamEntity.ID),
+		dbmembership.UserIDEQ(newOwnerID),
+		dbmembership.StatusEQ(TeamMembershipActive),
+	)).Only(txCtx)
+	if err != nil {
+		if dbent.IsNotFound(err) {
+			return 0, ErrTeamOwnerTransferTarget
+		}
+		return 0, err
+	}
+	oldOwner, newOwner, err := s.lockTeamUsers(txCtx, client, oldOwnerID, newOwnerID)
+	if err != nil {
+		return 0, err
+	}
+	if newOwner.Status != domain.StatusActive || newOwner.Role == domain.RoleAdmin {
+		return 0, infraBadRequest("TEAM_OWNER_INELIGIBLE", "只有状态正常的普通用户可以成为团队主账号")
+	}
+
+	pool := oldOwner.Balance
+	newOwnerBefore := roundTeamAmount(newOwner.Balance + newOwner.TeamBalance)
+	newOwnerAfter := roundTeamAmount(newOwner.Balance + newOwner.TeamBalance + pool)
+
+	if _, err := client.Team.UpdateOneID(teamEntity.ID).SetOwnerID(newOwnerID).Save(txCtx); err != nil {
+		return 0, fmt.Errorf("switch team owner: %w", err)
+	}
+	if err := client.TeamMembership.DeleteOneID(membership.ID).Exec(txCtx); err != nil {
+		return 0, fmt.Errorf("remove new owner membership: %w", err)
+	}
+	now := time.Now()
+	if _, err := client.TeamMembership.Create().
+		SetTeamID(teamEntity.ID).
+		SetUserID(oldOwnerID).
+		SetInvitedBy(operatorID).
+		SetStatus(TeamMembershipActive).
+		SetJoinedAt(now).
+		Save(txCtx); err != nil {
+		return 0, fmt.Errorf("demote previous owner to member: %w", err)
+	}
+	if _, err := client.User.UpdateOneID(newOwnerID).SetBalance(newOwnerAfter).SetTeamBalance(0).Save(txCtx); err != nil {
+		return 0, fmt.Errorf("credit new team owner: %w", err)
+	}
+	if _, err := client.User.UpdateOneID(oldOwnerID).SetBalance(0).SetTeamBalance(0).Save(txCtx); err != nil {
+		return 0, fmt.Errorf("clear previous team owner balance: %w", err)
+	}
+	if err := resetTeamOnlyAPIKeys(txCtx, client, newOwnerID); err != nil {
+		return 0, err
+	}
+	if err := resetTeamOnlyAPIKeys(txCtx, client, oldOwnerID); err != nil {
+		return 0, err
+	}
+
+	action := TeamActionOwnerTransferred
+	note := fmt.Sprintf("owner: %s -> %s", oldOwner.Email, newOwner.Email)
+	if admin {
+		action = TeamActionAdminOwnerTransfer
+		note = "管理员更换主账号，" + note
+	}
+	if err := createTeamTransaction(txCtx, client, teamEntity.ID, operatorID, &newOwnerID, action, pool, oldOwner.Balance, newOwnerAfter, &newOwnerBefore, &newOwnerAfter, note); err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf("commit owner transfer: %w", err)
+	}
+	s.invalidateBalanceCaches(ctx, oldOwnerID, newOwnerID)
+	return newOwnerID, nil
 }
 
 func (s *TeamService) SetStatus(ctx context.Context, adminID, teamID int64, status, reason string) (*TeamSummary, error) {
@@ -864,13 +957,6 @@ func (s *TeamService) SetStatus(ctx context.Context, adminID, teamID int64, stat
 		return nil, fmt.Errorf("commit team status transaction: %w", err)
 	}
 	return s.GetAdminTeam(ctx, teamID)
-}
-
-func (s *TeamService) IsFinancialActionRestricted(ctx context.Context, userID int64) (bool, error) {
-	return s.client.TeamMembership.Query().Where(
-		dbmembership.UserIDEQ(userID),
-		dbmembership.StatusIn(TeamMembershipActive, TeamMembershipExitPending),
-	).Exist(ctx)
 }
 
 func (s *TeamService) requireOwnedTeam(ctx context.Context, ownerID int64, active bool) (*dbent.Team, error) {
@@ -929,6 +1015,18 @@ func (s *TeamService) lockMembershipQuery(query *dbent.TeamMembershipQuery) *dbe
 	return query
 }
 
+// resetTeamOnlyAPIKeys 把用户名下“仅扣团队额度”的 API Key 改回默认模式。
+// 用户离开团队（或成为主账号）后不再有团队额度，team_only 会让请求全部失败。
+func resetTeamOnlyAPIKeys(ctx context.Context, client *dbent.Client, userID int64) error {
+	if _, err := client.APIKey.Update().
+		Where(dbapikey.UserIDEQ(userID), dbapikey.BalanceModeEQ(BalanceModeTeamOnly), dbapikey.DeletedAtIsNil()).
+		SetBalanceMode(DefaultBalanceMode).
+		Save(ctx); err != nil {
+		return fmt.Errorf("reset team-only api keys: %w", err)
+	}
+	return nil
+}
+
 func createTeamTransaction(ctx context.Context, client *dbent.Client, teamID, operatorID int64, memberID *int64, action string, amount, ownerBefore, ownerAfter float64, memberBefore, memberAfter *float64, note string) error {
 	_, err := client.TeamTransaction.Create().
 		SetTeamID(teamID).
@@ -948,20 +1046,6 @@ func createTeamTransaction(ctx context.Context, client *dbent.Client, teamID, op
 	return nil
 }
 
-func hasPendingTeamPayment(ctx context.Context, client *dbent.Client, userID int64) (bool, error) {
-	return client.PaymentOrder.Query().Where(
-		dbpaymentorder.UserIDEQ(userID),
-		dbpaymentorder.StatusIn(
-			OrderStatusPending,
-			OrderStatusPaid,
-			OrderStatusRecharging,
-			OrderStatusRefundRequested,
-			OrderStatusRefunding,
-			OrderStatusRefundPending,
-		),
-	).Exist(ctx)
-}
-
 func teamMemberView(membership *dbent.TeamMembership, user *dbent.User) TeamMemberView {
 	return TeamMemberView{
 		MembershipID:    membership.ID,
@@ -971,6 +1055,8 @@ func teamMemberView(membership *dbent.TeamMembership, user *dbent.User) TeamMemb
 		Remark:          membership.Remark,
 		Status:          membership.Status,
 		Balance:         user.Balance,
+		TeamBalance:     user.TeamBalance,
+		TotalBalance:    roundTeamAmount(user.Balance + user.TeamBalance),
 		FrozenBalance:   user.FrozenBalance,
 		Concurrency:     user.Concurrency,
 		RPMLimit:        user.RpmLimit,
@@ -984,12 +1070,16 @@ func roundTeamAmount(value float64) float64 {
 	return math.Round(value*1e8) / 1e8
 }
 
+// invalidateBalanceCaches 同时失效认证快照缓存和余额缓存：团队划拨会直接改写 users.balance，
+// 不经过计费链路，必须让网关下一次请求重新读库。
 func (s *TeamService) invalidateBalanceCaches(ctx context.Context, userIDs ...int64) {
-	if s.authCacheInvalidator == nil {
-		return
-	}
 	for _, userID := range userIDs {
-		s.authCacheInvalidator.InvalidateAuthCacheByUserID(ctx, userID)
+		if s.authCacheInvalidator != nil {
+			s.authCacheInvalidator.InvalidateAuthCacheByUserID(ctx, userID)
+		}
+		if s.billingCache != nil {
+			_ = s.billingCache.InvalidateUserBalance(ctx, userID)
+		}
 	}
 }
 

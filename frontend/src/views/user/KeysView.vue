@@ -507,6 +507,18 @@
           </Select>
         </div>
 
+        <div v-if="showBalanceMode">
+          <label class="input-label">{{ t('keys.balanceMode') }}</label>
+          <Select
+            v-model="formData.balance_mode"
+            :options="balanceModeOptions"
+            :placeholder="t('keys.balanceMode')"
+            id="api-key-balance-mode"
+            :aria-label="t('keys.balanceMode')"
+          />
+          <p class="input-hint">{{ t('keys.balanceModeHint') }}</p>
+        </div>
+
         <!-- Custom Key Section (only for create) -->
         <div v-if="!showEditModal" class="space-y-3">
           <div class="flex items-center justify-between">
@@ -1140,7 +1152,9 @@ import TablePageLayout from '@/components/layout/TablePageLayout.vue'
 	import EndpointPopover from '@/components/keys/EndpointPopover.vue'
 	import GroupBadge from '@/components/common/GroupBadge.vue'
 	import GroupOptionItem from '@/components/common/GroupOptionItem.vue'
-	import type { ApiKey, Group, PublicSettings, SubscriptionType, GroupPlatform, UpdateApiKeyRequest } from '@/types'
+	import type { ApiKey, ApiKeyBalanceMode, Group, PublicSettings, SubscriptionType, GroupPlatform, UpdateApiKeyRequest } from '@/types'
+import { API_KEY_BALANCE_MODES } from '@/types'
+import { useTeamStore } from '@/stores'
 import type { Column } from '@/components/common/types'
 import type { BatchApiKeyUsageStats } from '@/api/usage'
 import { formatDateTime } from '@/utils/format'
@@ -1173,6 +1187,11 @@ interface GroupOption {
 
 const appStore = useAppStore()
 const onboardingStore = useOnboardingStore()
+const teamStore = useTeamStore()
+const showBalanceMode = computed(() => teamStore.isOwner || teamStore.isMember)
+const balanceModeOptions = computed(() =>
+  API_KEY_BALANCE_MODES.map((mode) => ({ value: mode, label: t(`keys.balanceModes.${mode}`) }))
+)
 const { copyToClipboard: clipboardCopy } = useClipboard()
 
 const allColumns = computed<Column[]>(() => [
@@ -1346,7 +1365,8 @@ const formData = ref({
   rate_limit_7d: null as number | null,
   enable_expiration: false,
   expiration_preset: '30' as '7' | '30' | '90' | 'custom',
-  expiration_date: ''
+  expiration_date: '',
+  balance_mode: 'team_first' as ApiKeyBalanceMode
 })
 
 // 自定义Key验证
@@ -1578,7 +1598,8 @@ const editKey = (key: ApiKey) => {
     rate_limit_7d: key.rate_limit_7d || null,
     enable_expiration: hasExpiration,
     expiration_preset: 'custom',
-    expiration_date: key.expires_at ? formatDateTimeLocal(key.expires_at) : ''
+    expiration_date: key.expires_at ? formatDateTimeLocal(key.expires_at) : '',
+    balance_mode: key.balance_mode || 'team_first'
   }
   showEditModal.value = true
 }
@@ -1728,6 +1749,7 @@ const handleSubmit = async () => {
         rate_limit_5h: rateLimitData.rate_limit_5h,
         rate_limit_1d: rateLimitData.rate_limit_1d,
         rate_limit_7d: rateLimitData.rate_limit_7d,
+        balance_mode: formData.value.balance_mode,
       }
       if (shouldSubmitEditStatus(selectedKey.value, formData.value.status)) {
         updates.status = formData.value.status
@@ -1744,7 +1766,8 @@ const handleSubmit = async () => {
         ipBlacklist,
         quota,
         expiresInDays,
-        rateLimitData
+        rateLimitData,
+        formData.value.balance_mode
       )
       appStore.showSuccess(t('keys.keyCreatedSuccess'))
       // Only advance tour if active, on submit step, and creation succeeded
@@ -1804,7 +1827,8 @@ const closeModals = () => {
     rate_limit_7d: null,
     enable_expiration: false,
     expiration_preset: '30',
-    expiration_date: ''
+    expiration_date: '',
+    balance_mode: 'team_first'
   }
 }
 
@@ -1959,6 +1983,7 @@ onMounted(() => {
   loadGroups()
   loadUserGroupRates()
   loadPublicSettings()
+  if (!teamStore.loaded) void teamStore.fetchContext()
   document.addEventListener('click', closeGroupSelector)
   resetTimer = setInterval(() => { now.value = new Date() }, 60000)
 })

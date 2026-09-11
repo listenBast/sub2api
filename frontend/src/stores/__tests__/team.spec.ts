@@ -14,12 +14,12 @@ describe('team store', () => {
     getContext.mockReset()
   })
 
-  it('derives the financial restriction from an active membership', async () => {
-    getContext.mockResolvedValue({ role: 'member', membership_status: 'active', financial_restricted: true })
+  it('keeps the legacy financial restriction flag off for active members', async () => {
+    getContext.mockResolvedValue({ role: 'member', membership_status: 'active', financial_restricted: false })
     const store = useTeamStore()
     await store.fetchContext()
     expect(store.isMember).toBe(true)
-    expect(store.financialRestricted).toBe(true)
+    expect(store.financialRestricted).toBe(false)
   })
 
   it('deduplicates concurrent context requests', async () => {

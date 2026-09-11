@@ -100,6 +100,11 @@ func LastUsedAt(v time.Time) predicate.APIKey {
 	return predicate.APIKey(sql.FieldEQ(FieldLastUsedAt, v))
 }
 
+// BalanceMode applies equality check predicate on the "balance_mode" field. It's identical to BalanceModeEQ.
+func BalanceMode(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldBalanceMode, v))
+}
+
 // Quota applies equality check predicate on the "quota" field. It's identical to QuotaEQ.
 func Quota(v float64) predicate.APIKey {
 	return predicate.APIKey(sql.FieldEQ(FieldQuota, v))
@@ -603,6 +608,71 @@ func IPBlacklistIsNil() predicate.APIKey {
 // IPBlacklistNotNil applies the NotNil predicate on the "ip_blacklist" field.
 func IPBlacklistNotNil() predicate.APIKey {
 	return predicate.APIKey(sql.FieldNotNull(FieldIPBlacklist))
+}
+
+// BalanceModeEQ applies the EQ predicate on the "balance_mode" field.
+func BalanceModeEQ(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldBalanceMode, v))
+}
+
+// BalanceModeNEQ applies the NEQ predicate on the "balance_mode" field.
+func BalanceModeNEQ(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldNEQ(FieldBalanceMode, v))
+}
+
+// BalanceModeIn applies the In predicate on the "balance_mode" field.
+func BalanceModeIn(vs ...string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldIn(FieldBalanceMode, vs...))
+}
+
+// BalanceModeNotIn applies the NotIn predicate on the "balance_mode" field.
+func BalanceModeNotIn(vs ...string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldNotIn(FieldBalanceMode, vs...))
+}
+
+// BalanceModeGT applies the GT predicate on the "balance_mode" field.
+func BalanceModeGT(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldGT(FieldBalanceMode, v))
+}
+
+// BalanceModeGTE applies the GTE predicate on the "balance_mode" field.
+func BalanceModeGTE(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldGTE(FieldBalanceMode, v))
+}
+
+// BalanceModeLT applies the LT predicate on the "balance_mode" field.
+func BalanceModeLT(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldLT(FieldBalanceMode, v))
+}
+
+// BalanceModeLTE applies the LTE predicate on the "balance_mode" field.
+func BalanceModeLTE(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldLTE(FieldBalanceMode, v))
+}
+
+// BalanceModeContains applies the Contains predicate on the "balance_mode" field.
+func BalanceModeContains(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldContains(FieldBalanceMode, v))
+}
+
+// BalanceModeHasPrefix applies the HasPrefix predicate on the "balance_mode" field.
+func BalanceModeHasPrefix(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldHasPrefix(FieldBalanceMode, v))
+}
+
+// BalanceModeHasSuffix applies the HasSuffix predicate on the "balance_mode" field.
+func BalanceModeHasSuffix(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldHasSuffix(FieldBalanceMode, v))
+}
+
+// BalanceModeEqualFold applies the EqualFold predicate on the "balance_mode" field.
+func BalanceModeEqualFold(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEqualFold(FieldBalanceMode, v))
+}
+
+// BalanceModeContainsFold applies the ContainsFold predicate on the "balance_mode" field.
+func BalanceModeContainsFold(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldContainsFold(FieldBalanceMode, v))
 }
 
 // QuotaEQ applies the EQ predicate on the "quota" field.

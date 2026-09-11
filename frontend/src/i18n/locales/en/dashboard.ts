@@ -284,6 +284,14 @@ export default {
     currentExpiration: 'Current expiration',
     expiresAt: 'Expires',
     noExpiration: 'Never',
+    balanceMode: 'Balance mode',
+    balanceModeHint: 'Team members can choose whether this key spends team quota or personal balance first. Redeemed and recharged funds go to personal balance only.',
+    balanceModes: {
+      team_first: 'Team quota first, then personal balance',
+      personal_first: 'Personal balance first, then team quota',
+      team_only: 'Team quota only',
+      personal_only: 'Personal balance only'
+    },
     status: {
       active: 'Active',
       inactive: 'Inactive',

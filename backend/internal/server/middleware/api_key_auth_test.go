@@ -1427,6 +1427,30 @@ func TestAPIKeyAuthRejectsExhaustedBalance(t *testing.T) {
 	requireAPIKeyAuthError(t, w, "INSUFFICIENT_BALANCE", "Insufficient account balance")
 }
 
+func TestAPIKeyAuthBalanceGateHonorsTeamBalanceMode(t *testing.T) {
+	cfg := &config.Config{RunMode: config.RunModeStandard}
+	tests := []struct {
+		name        string
+		balance     float64
+		teamBalance float64
+		mode        string
+		wantReject  bool
+	}{
+		{name: "team first can use team quota", balance: 0, teamBalance: 5, mode: service.BalanceModeTeamFirst},
+		{name: "personal first can fall back to team quota", balance: 0, teamBalance: 5, mode: service.BalanceModePersonalFirst},
+		{name: "team only can use team quota", balance: 0, teamBalance: 5, mode: service.BalanceModeTeamOnly},
+		{name: "personal only still rejects empty personal wallet", balance: 0, teamBalance: 5, mode: service.BalanceModePersonalOnly, wantReject: true},
+		{name: "no team quota rejects empty wallets", balance: 0, teamBalance: 0, mode: service.BalanceModeTeamFirst, wantReject: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			user := &service.User{Balance: tt.balance, TeamBalance: tt.teamBalance}
+			key := &service.APIKey{BalanceMode: tt.mode}
+			require.Equal(t, tt.wantReject, apiKeyBalanceBelowAuthThresholdForMode(user, key, cfg))
+		})
+	}
+}
+
 func TestAPIKeyAuthOpenAIQuotaErrorFormat(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

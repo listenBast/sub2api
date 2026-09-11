@@ -152,6 +152,27 @@ func (_u *UserUpdate) AddFrozenBalance(v float64) *UserUpdate {
 	return _u
 }
 
+// SetTeamBalance sets the "team_balance" field.
+func (_u *UserUpdate) SetTeamBalance(v float64) *UserUpdate {
+	_u.mutation.ResetTeamBalance()
+	_u.mutation.SetTeamBalance(v)
+	return _u
+}
+
+// SetNillableTeamBalance sets the "team_balance" field if the given value is not nil.
+func (_u *UserUpdate) SetNillableTeamBalance(v *float64) *UserUpdate {
+	if v != nil {
+		_u.SetTeamBalance(*v)
+	}
+	return _u
+}
+
+// AddTeamBalance adds value to the "team_balance" field.
+func (_u *UserUpdate) AddTeamBalance(v float64) *UserUpdate {
+	_u.mutation.AddTeamBalance(v)
+	return _u
+}
+
 // SetConcurrency sets the "concurrency" field.
 func (_u *UserUpdate) SetConcurrency(v int) *UserUpdate {
 	_u.mutation.ResetConcurrency()
@@ -1090,6 +1111,12 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if value, ok := _u.mutation.AddedFrozenBalance(); ok {
 		_spec.AddField(user.FieldFrozenBalance, field.TypeFloat64, value)
 	}
+	if value, ok := _u.mutation.TeamBalance(); ok {
+		_spec.SetField(user.FieldTeamBalance, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedTeamBalance(); ok {
+		_spec.AddField(user.FieldTeamBalance, field.TypeFloat64, value)
+	}
 	if value, ok := _u.mutation.Concurrency(); ok {
 		_spec.SetField(user.FieldConcurrency, field.TypeInt, value)
 	}
@@ -1950,6 +1977,27 @@ func (_u *UserUpdateOne) SetNillableFrozenBalance(v *float64) *UserUpdateOne {
 // AddFrozenBalance adds value to the "frozen_balance" field.
 func (_u *UserUpdateOne) AddFrozenBalance(v float64) *UserUpdateOne {
 	_u.mutation.AddFrozenBalance(v)
+	return _u
+}
+
+// SetTeamBalance sets the "team_balance" field.
+func (_u *UserUpdateOne) SetTeamBalance(v float64) *UserUpdateOne {
+	_u.mutation.ResetTeamBalance()
+	_u.mutation.SetTeamBalance(v)
+	return _u
+}
+
+// SetNillableTeamBalance sets the "team_balance" field if the given value is not nil.
+func (_u *UserUpdateOne) SetNillableTeamBalance(v *float64) *UserUpdateOne {
+	if v != nil {
+		_u.SetTeamBalance(*v)
+	}
+	return _u
+}
+
+// AddTeamBalance adds value to the "team_balance" field.
+func (_u *UserUpdateOne) AddTeamBalance(v float64) *UserUpdateOne {
+	_u.mutation.AddTeamBalance(v)
 	return _u
 }
 
@@ -2920,6 +2968,12 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 	}
 	if value, ok := _u.mutation.AddedFrozenBalance(); ok {
 		_spec.AddField(user.FieldFrozenBalance, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.TeamBalance(); ok {
+		_spec.SetField(user.FieldTeamBalance, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedTeamBalance(); ok {
+		_spec.AddField(user.FieldTeamBalance, field.TypeFloat64, value)
 	}
 	if value, ok := _u.mutation.Concurrency(); ok {
 		_spec.SetField(user.FieldConcurrency, field.TypeInt, value)

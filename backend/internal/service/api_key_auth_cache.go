@@ -26,15 +26,19 @@ type APIKeyAuthSnapshot struct {
 	RateLimit5h float64 `json:"rate_limit_5h"`
 	RateLimit1d float64 `json:"rate_limit_1d"`
 	RateLimit7d float64 `json:"rate_limit_7d"`
+
+	// BalanceMode 团队成员扣费方式（fork）。旧快照缺省时按 team_first 处理。
+	BalanceMode string `json:"balance_mode,omitempty"`
 }
 
 // APIKeyAuthUserSnapshot 用户快照
 type APIKeyAuthUserSnapshot struct {
-	ID            int64   `json:"id"`
-	Status        string  `json:"status"`
-	Role          string  `json:"role"`
-	Balance       float64 `json:"balance"`
-	Concurrency   int     `json:"concurrency"`
+	ID          int64   `json:"id"`
+	Status      string  `json:"status"`
+	Role        string  `json:"role"`
+	Balance     float64 `json:"balance"`
+	TeamBalance float64 `json:"team_balance,omitempty"` // fork：团队额度快照，用于免读库判定“没有团队额度”
+	Concurrency int     `json:"concurrency"`
 	AllowedGroups []int64 `json:"allowed_groups,omitempty"`
 
 	// Balance notification fields (required for CheckBalanceAfterDeduction)

@@ -42,6 +42,24 @@ type UsageBillingCommand struct {
 	APIKeyQuotaCost     float64
 	APIKeyRateLimitCost float64
 	AccountQuotaCost    float64
+
+	// BalanceMode 团队成员扣费方式（fork），决定 BalanceCost 在个人余额与团队额度之间的拆分。
+	// 空值按 team_first 处理；不参与幂等指纹计算。
+	BalanceMode string
+}
+
+// BalanceDeductionResult reports how a compatibility billing path split one
+// charge between the user's personal wallet and allocated team quota.
+type BalanceDeductionResult struct {
+	Personal float64
+	Team     float64
+}
+
+// BalanceModeDeductor is intentionally optional on UserRepository. Existing
+// repository fakes and third-party adapters continue to use the legacy
+// personal-only DeductBalance method until they implement this interface.
+type BalanceModeDeductor interface {
+	DeductBalanceByMode(ctx context.Context, id int64, amount float64, mode string) (BalanceDeductionResult, error)
 }
 
 func (c *UsageBillingCommand) Normalize() {
@@ -168,6 +186,11 @@ type UsageBillingApplyResult struct {
 	NewBalance           *float64           // post-deduction balance (nil = no balance deduction)
 	BalanceOverdrafted   bool               // true when the sufficient-balance guard missed and debt was still recorded
 	QuotaState           *AccountQuotaState // post-increment quota state (nil = no quota increment)
+
+	// 团队模式（fork）：本次从个人余额 / 团队额度分别扣掉的金额，以及扣费后的团队额度。
+	PersonalBalanceCost float64
+	TeamBalanceCost     float64
+	NewTeamBalance      *float64
 }
 
 // BatchImageBalanceHoldCommand describes an idempotent balance hold operation.

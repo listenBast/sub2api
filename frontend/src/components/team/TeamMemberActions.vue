@@ -19,6 +19,16 @@
       <span class="whitespace-nowrap">{{ t('team.allocate') }}</span>
     </button>
 
+    <button
+      v-if="member.status === 'active'"
+      type="button"
+      class="member-action text-gray-500 hover:bg-primary-50 hover:text-primary-600 dark:text-gray-400 dark:hover:bg-primary-900/20 dark:hover:text-primary-400"
+      @click="$emit('transfer', member)"
+    >
+      <Icon name="swap" size="sm" />
+      <span class="whitespace-nowrap">{{ t('team.transferOwner') }}</span>
+    </button>
+
     <template v-if="member.status === 'exit_pending'">
       <button
         type="button"
@@ -61,6 +71,7 @@ defineProps<{
 defineEmits<{
   'edit-remark': [member: TeamMember]
   allocate: [member: TeamMember]
+  transfer: [member: TeamMember]
   'review-exit': [member: TeamMember, approve: boolean]
   remove: [member: TeamMember]
 }>()

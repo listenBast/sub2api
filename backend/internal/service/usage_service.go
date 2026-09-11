@@ -38,6 +38,9 @@ type CreateUsageLogRequest struct {
 	RateMultiplier        float64 `json:"rate_multiplier"`
 	Stream                bool    `json:"stream"`
 	DurationMs            *int    `json:"duration_ms"`
+	// BalanceMode is used by compatibility callers that still invoke
+	// UsageService.Create instead of the unified gateway billing path.
+	BalanceMode            string  `json:"balance_mode"`
 }
 
 // UsageStats 使用统计
@@ -124,7 +127,13 @@ func (s *UsageService) Create(ctx context.Context, req CreateUsageLogRequest) (*
 	// 扣除用户余额
 	balanceUpdated := false
 	if inserted && req.ActualCost > 0 {
-		if err := s.userRepo.UpdateBalance(txCtx, req.UserID, -req.ActualCost); err != nil {
+		var err error
+		if deductor, ok := s.userRepo.(BalanceModeDeductor); ok {
+			_, err = deductor.DeductBalanceByMode(txCtx, req.UserID, req.ActualCost, NormalizeBalanceMode(req.BalanceMode))
+		} else {
+			err = s.userRepo.UpdateBalance(txCtx, req.UserID, -req.ActualCost)
+		}
+		if err != nil {
 			return nil, fmt.Errorf("update user balance: %w", err)
 		}
 		balanceUpdated = true

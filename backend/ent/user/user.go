@@ -31,6 +31,8 @@ const (
 	FieldBalance = "balance"
 	// FieldFrozenBalance holds the string denoting the frozen_balance field in the database.
 	FieldFrozenBalance = "frozen_balance"
+	// FieldTeamBalance holds the string denoting the team_balance field in the database.
+	FieldTeamBalance = "team_balance"
 	// FieldConcurrency holds the string denoting the concurrency field in the database.
 	FieldConcurrency = "concurrency"
 	// FieldStatus holds the string denoting the status field in the database.
@@ -222,6 +224,7 @@ var Columns = []string{
 	FieldRole,
 	FieldBalance,
 	FieldFrozenBalance,
+	FieldTeamBalance,
 	FieldConcurrency,
 	FieldStatus,
 	FieldUsername,
@@ -283,6 +286,8 @@ var (
 	DefaultBalance float64
 	// DefaultFrozenBalance holds the default value on creation for the "frozen_balance" field.
 	DefaultFrozenBalance float64
+	// DefaultTeamBalance holds the default value on creation for the "team_balance" field.
+	DefaultTeamBalance float64
 	// DefaultConcurrency holds the default value on creation for the "concurrency" field.
 	DefaultConcurrency int
 	// DefaultStatus holds the default value on creation for the "status" field.
@@ -361,6 +366,11 @@ func ByBalance(opts ...sql.OrderTermOption) OrderOption {
 // ByFrozenBalance orders the results by the frozen_balance field.
 func ByFrozenBalance(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldFrozenBalance, opts...).ToFunc()
+}
+
+// ByTeamBalance orders the results by the team_balance field.
+func ByTeamBalance(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldTeamBalance, opts...).ToFunc()
 }
 
 // ByConcurrency orders the results by the concurrency field.

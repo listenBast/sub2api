@@ -88,9 +88,9 @@
         </div>
 
         <div v-if="detailTab === 'members'" class="mt-4 hidden overflow-x-auto md:block">
-          <table class="data-table min-w-[760px]"><thead><tr><th>{{ t('team.members') }}</th><th>{{ t('team.status') }}</th><th>{{ t('team.balance') }}</th><th>{{ t('team.frozenBalance') }}</th><th class="text-right">{{ t('team.actions') }}</th></tr></thead><tbody>
-            <tr v-for="member in detailMembers" :key="member.membership_id"><td><p class="font-medium">{{ memberDisplayName(member) }}</p><p class="text-xs text-gray-500">{{ member.email }}</p></td><td>{{ membershipStatusLabel(member.status) }}</td><td class="tabular-nums">{{ formatMoney(member.balance) }}</td><td class="tabular-nums">{{ formatMoney(member.frozen_balance) }}</td><td class="text-right"><div class="flex justify-end gap-1"><button type="button" class="icon-action" :title="t('team.editRemark')" @click="openAdminRemark(member)"><Icon name="edit" size="sm" /></button><button type="button" class="icon-action icon-action-danger" :title="member.status === 'invited' ? t('team.cancelInvite') : t('team.remove')" @click="confirmRemove(member)"><Icon :name="member.status === 'invited' ? 'xCircle' : 'trash'" size="sm" /></button></div></td></tr>
-            <tr v-if="!detailMembers.length"><td colspan="5" class="py-8 text-center text-gray-500">{{ t('team.empty') }}</td></tr>
+          <table class="data-table min-w-[880px]"><thead><tr><th>{{ t('team.members') }}</th><th>{{ t('team.status') }}</th><th>{{ t('team.personalBalance') }}</th><th>{{ t('team.teamQuota') }}</th><th>{{ t('team.availableBalance') }}</th><th class="text-right">{{ t('team.actions') }}</th></tr></thead><tbody>
+            <tr v-for="member in detailMembers" :key="member.membership_id"><td><p class="font-medium">{{ memberDisplayName(member) }}</p><p class="text-xs text-gray-500">{{ member.email }}</p></td><td>{{ membershipStatusLabel(member.status) }}</td><td class="tabular-nums">{{ formatMoney(member.balance) }}</td><td class="tabular-nums">{{ formatMoney(member.team_balance) }}</td><td class="tabular-nums">{{ formatMoney(member.total_balance) }}</td><td class="text-right"><div class="flex justify-end gap-1"><button type="button" class="icon-action" :title="t('team.editRemark')" :aria-label="t('team.editRemark')" @click="openAdminRemark(member)"><Icon name="edit" size="sm" /></button><button v-if="member.status === 'active'" type="button" class="icon-action" :title="t('team.adminTransferOwner')" :aria-label="t('team.adminTransferOwner')" @click="confirmTransfer(member)"><Icon name="swap" size="sm" /></button><button type="button" class="icon-action icon-action-danger" :title="member.status === 'invited' ? t('team.cancelInvite') : t('team.remove')" :aria-label="member.status === 'invited' ? t('team.cancelInvite') : t('team.remove')" @click="confirmRemove(member)"><Icon :name="member.status === 'invited' ? 'xCircle' : 'trash'" size="sm" /></button></div></td></tr>
+            <tr v-if="!detailMembers.length"><td colspan="6" class="py-8 text-center text-gray-500">{{ t('team.empty') }}</td></tr>
           </tbody></table>
         </div>
         <div v-if="detailTab === 'members'" class="mt-4 space-y-3 md:hidden">
@@ -100,10 +100,15 @@
               <span class="status-badge shrink-0">{{ membershipStatusLabel(member.status) }}</span>
             </div>
             <dl class="mt-4 grid grid-cols-2 gap-3 text-sm">
-              <div><dt class="text-gray-500 dark:text-gray-400">{{ t('team.balance') }}</dt><dd class="mt-1 tabular-nums text-gray-900 dark:text-white">{{ formatMoney(member.balance) }}</dd></div>
-              <div><dt class="text-gray-500 dark:text-gray-400">{{ t('team.frozenBalance') }}</dt><dd class="mt-1 tabular-nums text-gray-900 dark:text-white">{{ formatMoney(member.frozen_balance) }}</dd></div>
+              <div><dt class="text-gray-500 dark:text-gray-400">{{ t('team.personalBalance') }}</dt><dd class="mt-1 tabular-nums text-gray-900 dark:text-white">{{ formatMoney(member.balance) }}</dd></div>
+              <div><dt class="text-gray-500 dark:text-gray-400">{{ t('team.teamQuota') }}</dt><dd class="mt-1 tabular-nums text-gray-900 dark:text-white">{{ formatMoney(member.team_balance) }}</dd></div>
+              <div class="col-span-2"><dt class="text-gray-500 dark:text-gray-400">{{ t('team.availableBalance') }}</dt><dd class="mt-1 tabular-nums text-gray-900 dark:text-white">{{ formatMoney(member.total_balance) }}</dd></div>
             </dl>
-            <div class="mt-4 grid grid-cols-2 gap-2 border-t border-gray-100 pt-3 dark:border-dark-700"><button type="button" class="btn btn-secondary min-h-11 gap-2" @click="openAdminRemark(member)"><Icon name="edit" size="sm" />{{ t('team.editRemark') }}</button><button type="button" class="btn btn-danger min-h-11 gap-2" @click="confirmRemove(member)"><Icon :name="member.status === 'invited' ? 'xCircle' : 'trash'" size="sm" />{{ member.status === 'invited' ? t('team.cancelInvite') : t('team.remove') }}</button></div>
+            <div class="mt-4 grid grid-cols-2 gap-2 border-t border-gray-100 pt-3 dark:border-dark-700">
+              <button type="button" class="btn btn-secondary min-h-11 gap-2" @click="openAdminRemark(member)"><Icon name="edit" size="sm" />{{ t('team.editRemark') }}</button>
+              <button v-if="member.status === 'active'" type="button" class="btn btn-secondary min-h-11 gap-2" @click="confirmTransfer(member)"><Icon name="swap" size="sm" />{{ t('team.adminTransferOwner') }}</button>
+              <button type="button" class="btn btn-danger min-h-11 gap-2" :class="member.status === 'invited' ? 'col-span-1' : 'col-span-2'" @click="confirmRemove(member)"><Icon :name="member.status === 'invited' ? 'xCircle' : 'trash'" size="sm" />{{ member.status === 'invited' ? t('team.cancelInvite') : t('team.remove') }}</button>
+            </div>
           </article>
           <p v-if="!detailMembers.length" class="py-8 text-center text-sm text-gray-500">{{ t('team.empty') }}</p>
         </div>
@@ -115,6 +120,7 @@
           <label><span class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">{{ t('team.endDate') }}</span><input v-model="usageFilters.end_date" type="date" class="form-input w-full" /></label>
           <button class="btn btn-primary min-h-11 self-end" :disabled="usageLoading">{{ t('common.search') }}</button>
         </form>
+        <TeamUsageSummaryCards v-if="detailTab === 'usage' && usageFilters.member_id" class="mt-4" :summary="usageSummary" />
 
         <div v-if="detailTab === 'usage'" class="mt-4 hidden overflow-x-auto md:block">
           <table class="data-table min-w-[760px]"><thead><tr><th>{{ t('team.createdAt') }}</th><th>{{ t('team.members') }}</th><th>{{ t('team.filterModel') }}</th><th>{{ t('team.totalTokens') }}</th><th>{{ t('team.actualCost') }}</th></tr></thead><tbody>
@@ -200,6 +206,7 @@
     </BaseDialog>
 
     <ConfirmDialog :show="removeConfirmOpen" :title="selectedMember?.status === 'invited' ? t('team.cancelInvite') : t('team.remove')" :message="selectedMember?.status === 'invited' ? t('team.confirmAdminCancelInvite') : t('team.confirmAdminRemove')" danger @cancel="removeConfirmOpen = false" @confirm="removeSelectedMember" />
+    <ConfirmDialog :show="transferConfirmOpen" :title="t('team.transferOwnerTitle')" :message="t('team.confirmAdminTransferOwner', { member: selectedMember ? memberDisplayName(selectedMember) : '-' })" danger @cancel="transferConfirmOpen = false" @confirm="transferSelectedMember" />
     <ConfirmDialog :show="deleteTeamConfirmOpen" :title="t('team.deleteTeam')" :message="t('team.confirmAdminDelete')" danger @cancel="deleteTeamConfirmOpen = false" @confirm="deleteCurrentTeam" />
     </div>
   </AppLayout>
@@ -208,7 +215,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { adminTeamsAPI, type TeamAdminOverview, type TeamDashboard, type TeamMember, type TeamOwner, type TeamSummary, type TeamTransaction, type TeamUsageItem } from '@/api/team'
+import { adminTeamsAPI, type TeamAdminOverview, type TeamDashboard, type TeamMember, type TeamMemberUsageSummary, type TeamOwner, type TeamSummary, type TeamTransaction, type TeamUsageItem } from '@/api/team'
 import { useAppStore } from '@/stores'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
@@ -217,6 +224,7 @@ import Pagination from '@/components/common/Pagination.vue'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import AdminUserSearchSelect from '@/components/admin/AdminUserSearchSelect.vue'
 import TeamLedgerPanel from '@/components/team/TeamLedgerPanel.vue'
+import TeamUsageSummaryCards from '@/components/team/TeamUsageSummaryCards.vue'
 
 const { t, locale } = useI18n()
 const appStore = useAppStore()
@@ -233,12 +241,14 @@ const usage = reactive<{ items: TeamUsageItem[]; total: number; page: number; pa
 const usageFilters = reactive({ member_id: 0, model: '', start_date: '', end_date: '' })
 const usageLoading = ref(false)
 const usageLoaded = ref(false)
+const usageSummary = ref<TeamMemberUsageSummary | null>(null)
 const transactionsLoading = ref(false)
 const detailTab = ref<'members' | 'usage' | 'ledger'>('members')
 const statusConfirmOpen = ref(false)
 const statusReason = ref('')
 const statusTarget = ref<'active' | 'suspended'>('suspended')
 const removeConfirmOpen = ref(false)
+const transferConfirmOpen = ref(false)
 const selectedMember = ref<TeamMember | null>(null)
 const deleteTeamConfirmOpen = ref(false)
 const createTeamOpen = ref(false)
@@ -285,6 +295,7 @@ async function openDetails(team: TeamSummary) {
   Object.assign(usage, { items: [], total: 0, page: 1, pages: 1 })
   Object.assign(usageFilters, { member_id: 0, model: '', start_date: '', end_date: '' })
   usageLoaded.value = false
+  usageSummary.value = null
   transactionsLoading.value = true
   try {
     const item = await adminTeamsAPI.get(team.id)
@@ -366,16 +377,24 @@ async function selectDetailTab(tab: typeof detailTab.value) {
 async function loadAdminUsage(page: number) {
   if (!detail.value) return
   usageLoading.value = true
+  // Do not leave a previous member's totals visible while a new filter is
+  // being resolved; the card should always describe the current selection.
+  usageSummary.value = null
   try {
-    const result = await adminTeamsAPI.usage(detail.value.id, {
+    const params = {
       page,
       page_size: 20,
       member_id: usageFilters.member_id || undefined,
       model: usageFilters.model || undefined,
       start_date: usageFilters.start_date || undefined,
       end_date: usageFilters.end_date || undefined
-    })
+    }
+    const [result, summary] = await Promise.all([
+      adminTeamsAPI.usage(detail.value.id, params),
+      usageFilters.member_id ? adminTeamsAPI.usageSummary(detail.value.id, params) : Promise.resolve(null)
+    ])
     Object.assign(usage, result)
+    usageSummary.value = summary
     usageLoaded.value = true
   } catch (error) { showError(error) } finally { usageLoading.value = false }
 }
@@ -414,6 +433,28 @@ async function toggleStatus() {
 }
 
 function confirmRemove(member: TeamMember) { selectedMember.value = member; removeConfirmOpen.value = true }
+function confirmTransfer(member: TeamMember) { selectedMember.value = member; transferConfirmOpen.value = true }
+async function transferSelectedMember() {
+  transferConfirmOpen.value = false
+  if (!detail.value || !selectedMember.value) return
+  submitting.value = true
+  try {
+    const teamId = detail.value.id
+    const updated = await adminTeamsAPI.transferOwner(teamId, selectedMember.value.user_id)
+    detail.value = { ...updated, members: updated.members ?? [] }
+    // Refresh the detail aggregates and ledger as ownership changes the team
+    // balance pool and appends an ownership-transfer transaction.
+    try {
+      dashboard.value = await adminTeamsAPI.dashboard(teamId)
+    } catch (error) {
+      // Ownership has already changed; keep the refreshed member list usable
+      // even when the optional aggregate endpoint is temporarily unavailable.
+      showError(error)
+    }
+    await Promise.all([loadAdminTransactions(1), loadTeams(teams.page), loadOverview()])
+    appStore.showSuccess(t('team.saved'))
+  } catch (error) { showError(error) } finally { submitting.value = false }
+}
 async function removeSelectedMember() {
   removeConfirmOpen.value = false
   if (!detail.value || !selectedMember.value) return

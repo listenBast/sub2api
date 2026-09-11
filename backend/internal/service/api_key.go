@@ -52,6 +52,10 @@ type APIKey struct {
 	QuotaUsed float64    // Used quota amount
 	ExpiresAt *time.Time // Expiration time (nil = never expires)
 
+	// BalanceMode 团队成员扣费方式（team_first / personal_first / team_only / personal_only）。
+	// 见 NormalizeBalanceMode；非团队成员任何模式下都只扣个人余额。
+	BalanceMode string
+
 	// Rate limit fields
 	RateLimit5h   float64    // Rate limit in USD per 5h (0 = unlimited)
 	RateLimit1d   float64    // Rate limit in USD per 1d (0 = unlimited)

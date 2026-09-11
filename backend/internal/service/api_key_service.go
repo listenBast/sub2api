@@ -75,6 +75,8 @@ type APIKeyUpdateFields struct {
 	RateLimitUsage bool
 	// IPRules 覆盖 ip_whitelist 与 ip_blacklist。
 	IPRules bool
+	// BalanceMode 覆盖团队成员扣费方式 balance_mode（fork）。
+	BalanceMode bool
 }
 
 // IsEmpty 报告该次 Update 是否不写任何列。
@@ -223,6 +225,9 @@ type CreateAPIKeyRequest struct {
 	RateLimit5h float64 `json:"rate_limit_5h"`
 	RateLimit1d float64 `json:"rate_limit_1d"`
 	RateLimit7d float64 `json:"rate_limit_7d"`
+
+	// BalanceMode 团队成员扣费方式（空 = team_first）。
+	BalanceMode string `json:"balance_mode"`
 }
 
 // UpdateAPIKeyRequest 更新API Key请求
@@ -244,6 +249,9 @@ type UpdateAPIKeyRequest struct {
 	RateLimit1d         *float64 `json:"rate_limit_1d"`
 	RateLimit7d         *float64 `json:"rate_limit_7d"`
 	ResetRateLimitUsage *bool    `json:"reset_rate_limit_usage"` // Reset all usage counters to 0
+
+	// BalanceMode 团队成员扣费方式（nil = no change）。
+	BalanceMode *string `json:"balance_mode"`
 }
 
 func validateAPIKeyLimit(v float64) error {
@@ -262,6 +270,9 @@ func validateCreateAPIKeyRequest(req CreateAPIKeyRequest) error {
 	if req.ExpiresInDays != nil && *req.ExpiresInDays <= 0 {
 		return infraerrors.BadRequest("API_KEY_EXPIRY_INVALID", "expires_in_days must be greater than zero")
 	}
+	if strings.TrimSpace(req.BalanceMode) != "" && !IsValidBalanceMode(req.BalanceMode) {
+		return ErrAPIKeyBalanceModeInvalid
+	}
 	return nil
 }
 
@@ -272,6 +283,9 @@ func validateUpdateAPIKeyRequest(req UpdateAPIKeyRequest) error {
 				return err
 			}
 		}
+	}
+	if req.BalanceMode != nil && !IsValidBalanceMode(*req.BalanceMode) {
+		return ErrAPIKeyBalanceModeInvalid
 	}
 	return nil
 }
@@ -544,6 +558,7 @@ func (s *APIKeyService) Create(ctx context.Context, userID int64, req CreateAPIK
 		RateLimit5h: req.RateLimit5h,
 		RateLimit1d: req.RateLimit1d,
 		RateLimit7d: req.RateLimit7d,
+		BalanceMode: NormalizeBalanceMode(req.BalanceMode),
 	}
 
 	// Set expiration time if specified
@@ -881,6 +896,10 @@ func (s *APIKeyService) Update(ctx context.Context, id int64, userID int64, req 
 	if req.RateLimit7d != nil {
 		apiKey.RateLimit7d = *req.RateLimit7d
 		fields.RateLimits = true
+	}
+	if req.BalanceMode != nil && NormalizeBalanceMode(*req.BalanceMode) != NormalizeBalanceMode(apiKey.BalanceMode) {
+		apiKey.BalanceMode = NormalizeBalanceMode(*req.BalanceMode)
+		fields.BalanceMode = true
 	}
 	resetRateLimit := req.ResetRateLimitUsage != nil && *req.ResetRateLimitUsage
 	if resetRateLimit {

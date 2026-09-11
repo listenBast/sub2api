@@ -43,6 +43,8 @@ vi.mock('@/api/team', () => ({
     create: vi.fn(),
     addMember: vi.fn(),
     updateMemberRemark: vi.fn(),
+    transferOwner: vi.fn(),
+    usageSummary: vi.fn(),
     deleteTeam: mocks.deleteTeam
   }
 }))

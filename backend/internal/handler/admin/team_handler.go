@@ -182,6 +182,46 @@ func (h *TeamHandler) Usage(c *gin.Context) {
 	response.Paginated(c, items, result.Total, result.Page, result.PageSize)
 }
 
+// UsageSummary 按成员汇总团队用量（余额、请求数、Token 数、实际消费）。
+func (h *TeamHandler) UsageSummary(c *gin.Context) {
+	teamID, ok := adminTeamID(c)
+	if !ok {
+		return
+	}
+	filter, err := parseAdminTeamUsageFilter(c)
+	if err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+	summary, err := h.teamService.GetAdminUsageSummary(c.Request.Context(), teamID, filter)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, summary)
+}
+
+// TransferOwnership 管理员把团队主账号更换为指定成员。
+func (h *TeamHandler) TransferOwnership(c *gin.Context) {
+	teamID, ok := adminTeamID(c)
+	if !ok {
+		return
+	}
+	var req struct {
+		MemberID int64 `json:"member_id" binding:"required,gt=0"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "请选择要设为主账号的成员")
+		return
+	}
+	item, err := h.teamService.AdminTransferOwnership(c.Request.Context(), getAdminIDFromContext(c), teamID, req.MemberID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, item)
+}
+
 func (h *TeamHandler) Dashboard(c *gin.Context) {
 	teamID, ok := adminTeamID(c)
 	if !ok {

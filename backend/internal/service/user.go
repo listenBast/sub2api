@@ -20,9 +20,11 @@ type User struct {
 	Role           string
 	Balance        float64
 	FrozenBalance  float64
-	Concurrency    int
-	Status         string
-	AllowedGroups  []int64
+	// TeamBalance 团队模式下主账号分配给成员的团队额度（与个人余额 Balance 分开记账）。
+	TeamBalance   float64
+	Concurrency   int
+	Status        string
+	AllowedGroups []int64
 	// RestrictPublicGroups narrows the public groups this user may bind to the
 	// ones listed in AllowedGroups. False keeps the default, where every public
 	// group is bindable.

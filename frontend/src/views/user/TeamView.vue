@@ -47,9 +47,9 @@
 
     <template v-else-if="context?.role === 'member' && context.team">
       <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <MetricCard :label="t('team.balance')" :value="formatMoney(context.current_membership?.balance ?? 0)" />
-        <MetricCard :label="t('team.frozenBalance')" :value="formatMoney(context.current_membership?.frozen_balance ?? 0)" />
-        <MetricCard :label="t('team.owner')" :value="context.team.owner.username || context.team.owner.email" compact />
+        <MetricCard :label="t('team.personalBalance')" :value="formatMoney(context.current_membership?.balance ?? 0)" />
+        <MetricCard :label="t('team.teamQuota')" :value="formatMoney(context.current_membership?.team_balance ?? 0)" />
+        <MetricCard :label="t('team.availableBalance')" :value="formatMoney(context.current_membership?.total_balance ?? 0)" />
         <MetricCard :label="t('team.status')" :value="membershipStatusLabel(context.membership_status)" compact />
       </div>
       <section class="border-t border-gray-200 pt-5 dark:border-dark-700">
@@ -128,23 +128,27 @@
         </section>
         <div class="hidden overflow-x-auto md:block">
           <table class="data-table min-w-[920px]">
-            <thead><tr><th>{{ t('team.members') }}</th><th>{{ t('team.status') }}</th><th>{{ t('team.balance') }}</th><th>{{ t('team.frozenBalance') }}</th><th>{{ t('team.joinedAt') }}</th><th class="text-right">{{ t('team.actions') }}</th></tr></thead>
+            <thead><tr><th>{{ t('team.members') }}</th><th>{{ t('team.status') }}</th><th>{{ t('team.personalBalance') }}</th><th>{{ t('team.teamQuota') }}</th><th>{{ t('team.availableBalance') }}</th><th>{{ t('team.joinedAt') }}</th><th class="text-right">{{ t('team.actions') }}</th></tr></thead>
             <tbody>
               <tr v-for="member in teamMembers" :key="member.membership_id">
                 <td><p class="font-medium text-gray-900 dark:text-white">{{ memberDisplayName(member) }}</p><p class="text-xs text-gray-500">{{ member.email }}</p></td>
                 <td><span class="status-badge">{{ membershipStatusLabel(member.status) }}</span></td>
-                <td class="tabular-nums">{{ formatMoney(member.balance) }}</td><td class="tabular-nums">{{ formatMoney(member.frozen_balance) }}</td><td>{{ formatDate(member.joined_at || member.created_at) }}</td>
+                <td class="tabular-nums">{{ formatMoney(member.balance) }}</td>
+                <td class="tabular-nums">{{ formatMoney(member.team_balance) }}</td>
+                <td class="tabular-nums">{{ formatMoney(member.total_balance) }}</td>
+                <td>{{ formatDate(member.joined_at || member.created_at) }}</td>
                 <td>
                   <TeamMemberActions
                     :member="member"
                     @edit-remark="openRemark"
                     @allocate="openAllocation"
+                    @transfer="openConfirmation('transfer', $event)"
                     @review-exit="reviewMemberExit"
                     @remove="openConfirmation('remove', $event)"
                   />
                 </td>
               </tr>
-              <tr v-if="!teamMembers.length"><td colspan="6" class="py-10 text-center text-gray-500">{{ t('team.empty') }}</td></tr>
+              <tr v-if="!teamMembers.length"><td colspan="7" class="py-10 text-center text-gray-500">{{ t('team.empty') }}</td></tr>
             </tbody>
           </table>
         </div>
@@ -158,9 +162,10 @@
               <span class="status-badge shrink-0">{{ membershipStatusLabel(member.status) }}</span>
             </div>
             <dl class="mt-4 grid grid-cols-2 gap-3 text-sm">
-              <div><dt class="text-gray-500 dark:text-gray-400">{{ t('team.balance') }}</dt><dd class="mt-1 tabular-nums text-gray-900 dark:text-white">{{ formatMoney(member.balance) }}</dd></div>
-              <div><dt class="text-gray-500 dark:text-gray-400">{{ t('team.frozenBalance') }}</dt><dd class="mt-1 tabular-nums text-gray-900 dark:text-white">{{ formatMoney(member.frozen_balance) }}</dd></div>
-              <div class="col-span-2"><dt class="text-gray-500 dark:text-gray-400">{{ t('team.joinedAt') }}</dt><dd class="mt-1 text-gray-900 dark:text-white">{{ formatDate(member.joined_at || member.created_at) }}</dd></div>
+              <div><dt class="text-gray-500 dark:text-gray-400">{{ t('team.personalBalance') }}</dt><dd class="mt-1 tabular-nums text-gray-900 dark:text-white">{{ formatMoney(member.balance) }}</dd></div>
+              <div><dt class="text-gray-500 dark:text-gray-400">{{ t('team.teamQuota') }}</dt><dd class="mt-1 tabular-nums text-gray-900 dark:text-white">{{ formatMoney(member.team_balance) }}</dd></div>
+              <div><dt class="text-gray-500 dark:text-gray-400">{{ t('team.availableBalance') }}</dt><dd class="mt-1 tabular-nums text-gray-900 dark:text-white">{{ formatMoney(member.total_balance) }}</dd></div>
+              <div><dt class="text-gray-500 dark:text-gray-400">{{ t('team.joinedAt') }}</dt><dd class="mt-1 text-gray-900 dark:text-white">{{ formatDate(member.joined_at || member.created_at) }}</dd></div>
             </dl>
             <div class="mt-4 overflow-x-auto border-t border-gray-100 pt-3 dark:border-dark-700">
               <TeamMemberActions
@@ -168,6 +173,7 @@
                 class="justify-start"
                 @edit-remark="openRemark"
                 @allocate="openAllocation"
+                @transfer="openConfirmation('transfer', $event)"
                 @review-exit="reviewMemberExit"
                 @remove="openConfirmation('remove', $event)"
               />
@@ -175,6 +181,33 @@
           </article>
           <p v-if="!teamMembers.length" class="py-10 text-center text-sm text-gray-500">{{ t('team.empty') }}</p>
         </div>
+      </template>
+
+      <template v-else-if="activeTab === 'usage'">
+        <form class="grid gap-3 border-y border-gray-200 py-4 dark:border-dark-700 sm:grid-cols-2 lg:grid-cols-5" @submit.prevent="loadUsage(1)">
+          <label><span class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">{{ t('team.members') }}</span><select v-model.number="usageFilters.member_id" class="form-input w-full"><option :value="0">{{ t('team.filterMember') }}</option><option v-for="member in usageMemberOptions" :key="member.user_id" :value="member.user_id">{{ memberDisplayName(member) }}</option></select></label>
+          <label><span class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">{{ t('team.filterModel') }}</span><input v-model.trim="usageFilters.model" class="form-input w-full" /></label>
+          <label><span class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">{{ t('team.startDate') }}</span><input v-model="usageFilters.start_date" type="date" class="form-input w-full" /></label>
+          <label><span class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">{{ t('team.endDate') }}</span><input v-model="usageFilters.end_date" type="date" class="form-input w-full" /></label>
+          <button class="btn btn-primary min-h-11 self-end" :disabled="usageLoading">{{ t('common.search') }}</button>
+        </form>
+        <TeamUsageSummaryCards v-if="usageFilters.member_id" class="mt-4" :summary="usageSummary" />
+        <div class="mt-4 hidden overflow-x-auto md:block">
+          <table class="data-table min-w-[760px]"><thead><tr><th>{{ t('team.createdAt') }}</th><th>{{ t('team.members') }}</th><th>{{ t('team.filterModel') }}</th><th>{{ t('team.totalTokens') }}</th><th>{{ t('team.actualCost') }}</th></tr></thead><tbody>
+            <tr v-for="item in usage.items" :key="item.id"><td>{{ formatDate(item.created_at) }}</td><td>{{ item.member_email }}</td><td>{{ item.model }}</td><td class="tabular-nums">{{ formatNumber(item.total_tokens) }}</td><td class="tabular-nums">{{ formatMoney(item.actual_cost) }}</td></tr>
+            <tr v-if="usageLoading"><td colspan="5" class="py-8 text-center text-gray-500">...</td></tr>
+            <tr v-else-if="!usage.items.length"><td colspan="5" class="py-8 text-center text-gray-500">{{ t('team.empty') }}</td></tr>
+          </tbody></table>
+        </div>
+        <div class="mt-4 space-y-3 md:hidden">
+          <article v-for="item in usage.items" :key="item.id" class="rounded-md border border-gray-200 bg-white p-4 dark:border-dark-700 dark:bg-dark-800">
+            <div class="flex items-start justify-between gap-3"><div class="min-w-0"><p class="break-all font-medium text-gray-900 dark:text-white">{{ item.member_email }}</p><p class="mt-1 break-words text-sm text-gray-500 dark:text-gray-400">{{ item.model }}</p></div><p class="shrink-0 text-xs text-gray-500 dark:text-gray-400">{{ formatDate(item.created_at) }}</p></div>
+            <dl class="mt-4 grid grid-cols-2 gap-3 text-sm"><div><dt class="text-gray-500 dark:text-gray-400">{{ t('team.totalTokens') }}</dt><dd class="mt-1 tabular-nums text-gray-900 dark:text-white">{{ formatNumber(item.total_tokens) }}</dd></div><div><dt class="text-gray-500 dark:text-gray-400">{{ t('team.actualCost') }}</dt><dd class="mt-1 tabular-nums text-gray-900 dark:text-white">{{ formatMoney(item.actual_cost) }}</dd></div></dl>
+          </article>
+          <p v-if="usageLoading" class="py-8 text-center text-sm text-gray-500">...</p>
+          <p v-else-if="!usage.items.length" class="py-8 text-center text-sm text-gray-500">{{ t('team.empty') }}</p>
+        </div>
+        <Pagination v-if="usage.pages > 1" :total="usage.total" :page="usage.page" :page-size="20" :show-page-size-selector="false" @update:page="loadUsage" />
       </template>
 
       <TeamLedgerPanel
@@ -193,7 +226,9 @@
         <div class="text-sm text-gray-600 dark:text-gray-300">
           <p class="font-medium text-gray-900 dark:text-white">{{ allocationMember ? memberDisplayName(allocationMember) : '-' }}</p>
           <p class="mt-1 break-all text-xs text-gray-500 dark:text-gray-400">{{ allocationMember?.email }}</p>
-          <p class="mt-2 tabular-nums">{{ t('team.memberBalance') }}：{{ formatMoney(allocationMember?.balance ?? 0) }}</p>
+          <p class="mt-2 tabular-nums">{{ t('team.personalBalance') }}：{{ formatMoney(allocationMember?.balance ?? 0) }}</p>
+          <p class="mt-1 tabular-nums">{{ t('team.teamQuota') }}：{{ formatMoney(allocationMember?.team_balance ?? 0) }}</p>
+          <p class="mt-2 text-xs leading-5 text-gray-500 dark:text-gray-400">{{ t('team.allocateHint') }}</p>
         </div>
         <label class="block"><span class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">{{ t('team.amount') }}</span><input v-model.number="allocationAmount" type="number" step="0.00000001" required class="form-input w-full tabular-nums" :placeholder="t('team.adjustAmountPlaceholder')" /></label>
         <label class="block"><span class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">{{ t('team.note') }}</span><input v-model.trim="allocationNote" maxlength="500" class="form-input w-full" /></label>
@@ -228,17 +263,19 @@
 </template>
 
 <script setup lang="ts">
-import { computed, defineComponent, h, onMounted, ref } from 'vue'
+import { computed, defineComponent, h, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import teamAPI, { type TeamMember, type TeamTransaction } from '@/api/team'
+import teamAPI, { type TeamMember, type TeamMemberUsageSummary, type TeamOwner, type TeamTransaction, type TeamUsageItem } from '@/api/team'
 import { useAppStore, useAuthStore, useTeamStore } from '@/stores'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import Pagination from '@/components/common/Pagination.vue'
 import Skeleton from '@/components/common/Skeleton.vue'
 import Icon from '@/components/icons/Icon.vue'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import TeamLedgerPanel from '@/components/team/TeamLedgerPanel.vue'
 import TeamMemberActions from '@/components/team/TeamMemberActions.vue'
+import TeamUsageSummaryCards from '@/components/team/TeamUsageSummaryCards.vue'
 
 const { t, locale } = useI18n()
 const appStore = useAppStore()
@@ -250,11 +287,16 @@ const teamName = ref('')
 const inviteEmail = ref('')
 const submitting = ref(false)
 const renaming = ref(false)
-const activeTab = ref<'overview' | 'members' | 'ledger'>('overview')
+const activeTab = ref<'overview' | 'members' | 'usage' | 'ledger'>('overview')
 const transactions = ref<TeamTransaction[]>([])
 const transactionsPage = ref(1)
 const transactionsTotal = ref(0)
 const transactionsLoading = ref(false)
+const usage = reactive<{ items: TeamUsageItem[]; total: number; page: number; pages: number }>({ items: [], total: 0, page: 1, pages: 1 })
+const usageFilters = reactive({ member_id: 0, model: '', start_date: '', end_date: '' })
+const usageLoading = ref(false)
+const usageLoaded = ref(false)
+const usageSummary = ref<TeamMemberUsageSummary | null>(null)
 const allocationOpen = ref(false)
 const allocationMember = ref<TeamMember | null>(null)
 const allocationAmount = ref<number | null>(null)
@@ -263,22 +305,30 @@ const remarkOpen = ref(false)
 const remarkMember = ref<TeamMember | null>(null)
 const memberRemark = ref('')
 const confirmationOpen = ref(false)
-const confirmationType = ref<'exit' | 'remove' | 'dissolve'>('exit')
+const confirmationType = ref<'exit' | 'remove' | 'dissolve' | 'transfer'>('exit')
 const confirmationMember = ref<TeamMember | null>(null)
+const usageMemberOptions = computed(() => {
+  const team = context.value?.team
+  if (!team) return []
+  return [team.owner, ...teamMembers.value.filter((member) => member.status !== 'invited')]
+})
 
 const tabs = computed(() => [
   { key: 'overview' as const, label: t('team.overview') },
   { key: 'members' as const, label: t('team.members') },
+  { key: 'usage' as const, label: t('team.usage') },
   { key: 'ledger' as const, label: t('team.ledger') }
 ])
 const confirmationTitle = computed(() => {
   if (confirmationType.value === 'exit') return t('team.requestExit')
   if (confirmationType.value === 'dissolve') return t('team.dissolve')
+  if (confirmationType.value === 'transfer') return t('team.transferOwnerTitle')
   return confirmationMember.value?.status === 'invited' ? t('team.cancelInvite') : t('team.remove')
 })
 const confirmationMessage = computed(() => {
   if (confirmationType.value === 'exit') return t('team.confirmExit')
   if (confirmationType.value === 'dissolve') return t('team.confirmDissolve')
+  if (confirmationType.value === 'transfer') return t('team.confirmTransferOwner', { member: confirmationMember.value ? memberDisplayName(confirmationMember.value) : '-' })
   return confirmationMember.value?.status === 'invited' ? t('team.confirmCancelInvite') : t('team.confirmRemove')
 })
 
@@ -328,6 +378,34 @@ async function sendInvite() { await runAction(async () => { await teamAPI.invite
 function selectTab(tab: typeof activeTab.value) {
   activeTab.value = tab
   if (tab === 'ledger') void loadTransactions(1)
+  if (tab === 'usage' && !usageLoaded.value) void loadUsage(1)
+}
+
+async function loadUsage(page: number) {
+  usageLoading.value = true
+  // Clear the previous member's totals before applying a new selection.
+  usageSummary.value = null
+  try {
+    const params = {
+      page,
+      page_size: 20,
+      member_id: usageFilters.member_id || undefined,
+      model: usageFilters.model || undefined,
+      start_date: usageFilters.start_date || undefined,
+      end_date: usageFilters.end_date || undefined
+    }
+    const [result, summary] = await Promise.all([
+      teamAPI.listUsage(params),
+      usageFilters.member_id ? teamAPI.getUsageSummary(params) : Promise.resolve(null)
+    ])
+    Object.assign(usage, result)
+    usageSummary.value = summary
+    usageLoaded.value = true
+  } catch (error) {
+    showError(error)
+  } finally {
+    usageLoading.value = false
+  }
 }
 
 async function loadTransactions(page: number) {
@@ -368,11 +446,14 @@ async function reviewMemberExit(member: TeamMember, approve: boolean) {
   await runAction(() => teamAPI.reviewExit(member.user_id, approve))
 }
 
-function openConfirmation(type: 'exit' | 'remove' | 'dissolve', member?: TeamMember) { confirmationType.value = type; confirmationMember.value = member ?? null; confirmationOpen.value = true }
+function openConfirmation(type: 'exit' | 'remove' | 'dissolve' | 'transfer', member?: TeamMember) { confirmationType.value = type; confirmationMember.value = member ?? null; confirmationOpen.value = true }
 async function confirmAction() {
   confirmationOpen.value = false
   if (confirmationType.value === 'exit') await runAction(() => teamAPI.requestExit())
   else if (confirmationType.value === 'dissolve') await runAction(() => teamAPI.dissolve())
+  else if (confirmationType.value === 'transfer' && confirmationMember.value) {
+    await runAction(async () => teamStore.setContext(await teamAPI.transferOwnership(confirmationMember.value!.user_id)))
+  }
   else if (confirmationMember.value) await runAction(() => teamAPI.removeMember(confirmationMember.value!.user_id))
 }
 
@@ -381,7 +462,10 @@ function membershipStatusLabel(status?: string) {
   if (status === 'exit_pending') return t('team.statusExitPending')
   return t('team.statusActive')
 }
-function memberDisplayName(member: TeamMember) { return member.remark?.trim() || member.username || member.email }
+function memberDisplayName(member: TeamMember | TeamOwner) {
+  const remark = 'remark' in member && typeof member.remark === 'string' ? member.remark.trim() : ''
+  return remark || member.username || member.email
+}
 function formatMoney(value: number) { return new Intl.NumberFormat(locale.value, { style: 'currency', currency: 'USD', maximumFractionDigits: 4 }).format(value || 0) }
 function formatNumber(value: number) { return new Intl.NumberFormat(locale.value, { notation: value > 999999 ? 'compact' : 'standard', maximumFractionDigits: 1 }).format(value || 0) }
 function formatDate(value?: string | null) { return value ? new Intl.DateTimeFormat(locale.value, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : '-' }

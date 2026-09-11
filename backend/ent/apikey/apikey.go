@@ -37,6 +37,8 @@ const (
 	FieldIPWhitelist = "ip_whitelist"
 	// FieldIPBlacklist holds the string denoting the ip_blacklist field in the database.
 	FieldIPBlacklist = "ip_blacklist"
+	// FieldBalanceMode holds the string denoting the balance_mode field in the database.
+	FieldBalanceMode = "balance_mode"
 	// FieldQuota holds the string denoting the quota field in the database.
 	FieldQuota = "quota"
 	// FieldQuotaUsed holds the string denoting the quota_used field in the database.
@@ -106,6 +108,7 @@ var Columns = []string{
 	FieldLastUsedAt,
 	FieldIPWhitelist,
 	FieldIPBlacklist,
+	FieldBalanceMode,
 	FieldQuota,
 	FieldQuotaUsed,
 	FieldExpiresAt,
@@ -152,6 +155,10 @@ var (
 	DefaultStatus string
 	// StatusValidator is a validator for the "status" field. It is called by the builders before save.
 	StatusValidator func(string) error
+	// DefaultBalanceMode holds the default value on creation for the "balance_mode" field.
+	DefaultBalanceMode string
+	// BalanceModeValidator is a validator for the "balance_mode" field. It is called by the builders before save.
+	BalanceModeValidator func(string) error
 	// DefaultQuota holds the default value on creation for the "quota" field.
 	DefaultQuota float64
 	// DefaultQuotaUsed holds the default value on creation for the "quota_used" field.
@@ -221,6 +228,11 @@ func ByStatus(opts ...sql.OrderTermOption) OrderOption {
 // ByLastUsedAt orders the results by the last_used_at field.
 func ByLastUsedAt(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldLastUsedAt, opts...).ToFunc()
+}
+
+// ByBalanceMode orders the results by the balance_mode field.
+func ByBalanceMode(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldBalanceMode, opts...).ToFunc()
 }
 
 // ByQuota orders the results by the quota field.
