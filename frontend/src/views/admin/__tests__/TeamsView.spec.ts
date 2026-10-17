@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   dashboard: vi.fn(),
   transactions: vi.fn(),
   deleteTeam: vi.fn(),
+  adjustMemberTeamBalance: vi.fn(),
   showError: vi.fn(),
   showSuccess: vi.fn()
 }))
@@ -45,7 +46,8 @@ vi.mock('@/api/team', () => ({
     updateMemberRemark: vi.fn(),
     transferOwner: vi.fn(),
     usageSummary: vi.fn(),
-    deleteTeam: mocks.deleteTeam
+    deleteTeam: mocks.deleteTeam,
+    adjustMemberTeamBalance: mocks.adjustMemberTeamBalance
   }
 }))
 
@@ -128,6 +130,41 @@ describe('admin team details', () => {
     await flushPromises()
 
     expect(mocks.deleteTeam).toHaveBeenCalledWith(emptyTeam.id)
+    expect(mocks.showSuccess).toHaveBeenCalledWith('team.saved')
+  })
+  it('lets an administrator adjust a member team quota from the owner pool', async () => {
+    const member = {
+      membership_id: 3, user_id: 9, email: 'member@example.com', username: 'member', remark: '', status: 'active',
+      balance: 0, team_balance: 5, total_balance: 5, frozen_balance: 0, concurrency: 1, rpm_limit: 0, created_at: '2026-07-28T00:00:00Z'
+    }
+    const team = { ...emptyTeam, owner: { ...emptyTeam.owner, balance: 100 }, members: [member], active_member_count: 1 }
+    mocks.list.mockResolvedValue({ items: [team], total: 1, page: 1, pages: 1 })
+    mocks.get.mockResolvedValue(team)
+    mocks.adjustMemberTeamBalance.mockResolvedValue({ ...member, team_balance: 15, total_balance: 15 })
+    const wrapper = mount(TeamsView, {
+      global: {
+        stubs: {
+          AppLayout: { template: '<div><slot /></div>' },
+          AdminUserSearchSelect: true,
+          BaseDialog: { props: ['show', 'title'], template: '<section v-if="show" data-testid="dialog"><h2>{{ title }}</h2><slot /><slot name="footer" /></section>' },
+          ConfirmDialog: true,
+          Pagination: true,
+          TeamLedgerPanel: true,
+          Icon: true
+        }
+      }
+    })
+    await flushPromises()
+    await wrapper.findAll('button').find((button) => button.text() === 'team.details')!.trigger('click')
+    await flushPromises()
+
+    await wrapper.find('button[aria-label="team.adminAdjustTeamQuota"]').trigger('click')
+    const form = wrapper.get('#admin-team-quota-form')
+    await form.get('input[type="number"]').setValue('10')
+    await form.trigger('submit')
+    await flushPromises()
+
+    expect(mocks.adjustMemberTeamBalance).toHaveBeenCalledWith(team.id, member.user_id, { operation: 'add', amount: 10, source: 'owner_pool', notes: undefined })
     expect(mocks.showSuccess).toHaveBeenCalledWith('team.saved')
   })
 })

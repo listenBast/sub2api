@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"strings"
@@ -199,6 +200,48 @@ func (h *TeamHandler) UsageSummary(c *gin.Context) {
 		return
 	}
 	response.Success(c, summary)
+}
+
+// AdjustMemberTeamBalance 管理员设置 / 增加 / 扣减成员的团队额度（fork）。
+// POST /api/v1/admin/teams/:id/members/:member_id/team-balance
+func (h *TeamHandler) AdjustMemberTeamBalance(c *gin.Context) {
+	teamID, ok := adminTeamID(c)
+	if !ok {
+		return
+	}
+	memberID, err := strconv.ParseInt(c.Param("member_id"), 10, 64)
+	if err != nil || memberID <= 0 {
+		response.BadRequest(c, "成员 ID 无效")
+		return
+	}
+	var req AdjustTeamMemberBalanceRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "请求参数无效: "+err.Error())
+		return
+	}
+	adminID := getAdminIDFromContext(c)
+	idempotencyPayload := struct {
+		TeamID   int64                          `json:"team_id"`
+		MemberID int64                          `json:"member_id"`
+		Body     AdjustTeamMemberBalanceRequest `json:"body"`
+	}{TeamID: teamID, MemberID: memberID, Body: req}
+	executeAdminIdempotentJSON(c, "admin.teams.member_team_balance.update", idempotencyPayload, service.DefaultWriteIdempotencyTTL(), func(ctx context.Context) (any, error) {
+		return h.teamService.AdminAdjustMemberTeamBalance(ctx, adminID, teamID, memberID, service.TeamAdminBalanceAdjustment{
+			Operation: req.Operation,
+			Amount:    req.Amount,
+			Source:    req.Source,
+			Note:      req.Notes,
+		})
+	})
+}
+
+// AdjustTeamMemberBalanceRequest 管理员调整成员团队额度的请求体。
+// amount：set 时为目标额度（>= 0），add / subtract 时为调整值（> 0）。
+type AdjustTeamMemberBalanceRequest struct {
+	Amount    float64 `json:"amount" binding:"gte=0"`
+	Operation string  `json:"operation" binding:"required,oneof=set add subtract"`
+	Source    string  `json:"source" binding:"omitempty,oneof=owner_pool system"`
+	Notes     string  `json:"notes" binding:"max=500"`
 }
 
 // TransferOwnership 管理员把团队主账号更换为指定成员。

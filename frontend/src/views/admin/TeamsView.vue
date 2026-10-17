@@ -89,7 +89,7 @@
 
         <div v-if="detailTab === 'members'" class="mt-4 hidden overflow-x-auto md:block">
           <table class="data-table min-w-[880px]"><thead><tr><th>{{ t('team.members') }}</th><th>{{ t('team.status') }}</th><th>{{ t('team.personalBalance') }}</th><th>{{ t('team.teamQuota') }}</th><th>{{ t('team.availableBalance') }}</th><th class="text-right">{{ t('team.actions') }}</th></tr></thead><tbody>
-            <tr v-for="member in detailMembers" :key="member.membership_id"><td><p class="font-medium">{{ memberDisplayName(member) }}</p><p class="text-xs text-gray-500">{{ member.email }}</p></td><td>{{ membershipStatusLabel(member.status) }}</td><td class="tabular-nums">{{ formatMoney(member.balance) }}</td><td class="tabular-nums">{{ formatMoney(member.team_balance) }}</td><td class="tabular-nums">{{ formatMoney(member.total_balance) }}</td><td class="text-right"><div class="flex justify-end gap-1"><button type="button" class="icon-action" :title="t('team.editRemark')" :aria-label="t('team.editRemark')" @click="openAdminRemark(member)"><Icon name="edit" size="sm" /></button><button v-if="member.status === 'active'" type="button" class="icon-action" :title="t('team.adminTransferOwner')" :aria-label="t('team.adminTransferOwner')" @click="confirmTransfer(member)"><Icon name="swap" size="sm" /></button><button type="button" class="icon-action icon-action-danger" :title="member.status === 'invited' ? t('team.cancelInvite') : t('team.remove')" :aria-label="member.status === 'invited' ? t('team.cancelInvite') : t('team.remove')" @click="confirmRemove(member)"><Icon :name="member.status === 'invited' ? 'xCircle' : 'trash'" size="sm" /></button></div></td></tr>
+            <tr v-for="member in detailMembers" :key="member.membership_id"><td><p class="font-medium">{{ memberDisplayName(member) }}</p><p class="text-xs text-gray-500">{{ member.email }}</p></td><td>{{ membershipStatusLabel(member.status) }}</td><td class="tabular-nums">{{ formatMoney(member.balance) }}</td><td class="tabular-nums">{{ formatMoney(member.team_balance) }}</td><td class="tabular-nums">{{ formatMoney(member.total_balance) }}</td><td class="text-right"><div class="flex justify-end gap-1"><button v-if="member.status !== 'invited'" type="button" class="icon-action" :title="t('team.adminAdjustTeamQuota')" :aria-label="t('team.adminAdjustTeamQuota')" @click="openTeamQuota(member)"><Icon name="dollar" size="sm" /></button><button type="button" class="icon-action" :title="t('team.editRemark')" :aria-label="t('team.editRemark')" @click="openAdminRemark(member)"><Icon name="edit" size="sm" /></button><button v-if="member.status === 'active'" type="button" class="icon-action" :title="t('team.adminTransferOwner')" :aria-label="t('team.adminTransferOwner')" @click="confirmTransfer(member)"><Icon name="swap" size="sm" /></button><button type="button" class="icon-action icon-action-danger" :title="member.status === 'invited' ? t('team.cancelInvite') : t('team.remove')" :aria-label="member.status === 'invited' ? t('team.cancelInvite') : t('team.remove')" @click="confirmRemove(member)"><Icon :name="member.status === 'invited' ? 'xCircle' : 'trash'" size="sm" /></button></div></td></tr>
             <tr v-if="!detailMembers.length"><td colspan="6" class="py-8 text-center text-gray-500">{{ t('team.empty') }}</td></tr>
           </tbody></table>
         </div>
@@ -105,6 +105,7 @@
               <div class="col-span-2"><dt class="text-gray-500 dark:text-gray-400">{{ t('team.availableBalance') }}</dt><dd class="mt-1 tabular-nums text-gray-900 dark:text-white">{{ formatMoney(member.total_balance) }}</dd></div>
             </dl>
             <div class="mt-4 grid grid-cols-2 gap-2 border-t border-gray-100 pt-3 dark:border-dark-700">
+              <button v-if="member.status !== 'invited'" type="button" class="btn btn-secondary col-span-2 min-h-11 gap-2" @click="openTeamQuota(member)"><Icon name="dollar" size="sm" />{{ t('team.adminAdjustTeamQuota') }}</button>
               <button type="button" class="btn btn-secondary min-h-11 gap-2" @click="openAdminRemark(member)"><Icon name="edit" size="sm" />{{ t('team.editRemark') }}</button>
               <button v-if="member.status === 'active'" type="button" class="btn btn-secondary min-h-11 gap-2" @click="confirmTransfer(member)"><Icon name="swap" size="sm" />{{ t('team.adminTransferOwner') }}</button>
               <button type="button" class="btn btn-danger min-h-11 gap-2" :class="member.status === 'invited' ? 'col-span-1' : 'col-span-2'" @click="confirmRemove(member)"><Icon :name="member.status === 'invited' ? 'xCircle' : 'trash'" size="sm" />{{ member.status === 'invited' ? t('team.cancelInvite') : t('team.remove') }}</button>
@@ -184,6 +185,40 @@
       <template #footer><div class="flex justify-end gap-3"><button type="button" class="btn btn-secondary min-h-11" :disabled="submitting" @click="remarkOpen = false">{{ t('common.cancel') }}</button><button type="submit" form="admin-team-remark-form" class="btn btn-primary min-h-11" :disabled="submitting">{{ t('common.save') }}</button></div></template>
     </BaseDialog>
 
+    <BaseDialog :show="teamQuotaOpen" :title="t('team.adminAdjustTeamQuota')" width="narrow" @close="closeTeamQuota">
+      <form v-if="teamQuotaMember" id="admin-team-quota-form" class="space-y-4" @submit.prevent="saveTeamQuota">
+        <div class="rounded-md border border-gray-200 bg-gray-50 p-3 text-sm dark:border-dark-700 dark:bg-dark-800">
+          <p class="font-medium text-gray-900 dark:text-white">{{ memberDisplayName(teamQuotaMember) }}</p>
+          <p class="mt-1 break-all text-gray-500 dark:text-gray-400">{{ teamQuotaMember.email }}</p>
+          <dl class="mt-3 grid grid-cols-2 gap-2">
+            <div><dt class="text-xs text-gray-500 dark:text-gray-400">{{ t('team.adminTeamQuotaCurrent') }}</dt><dd class="tabular-nums text-gray-900 dark:text-white">{{ formatMoney(teamQuotaMember.team_balance) }}</dd></div>
+            <div><dt class="text-xs text-gray-500 dark:text-gray-400">{{ t('team.personalBalance') }}</dt><dd class="tabular-nums text-gray-900 dark:text-white">{{ formatMoney(teamQuotaMember.balance) }}</dd></div>
+          </dl>
+        </div>
+        <div>
+          <span class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">{{ t('team.adminTeamQuotaOperation') }}</span>
+          <div class="inline-flex max-w-full overflow-x-auto rounded-md border border-gray-200 bg-gray-50 p-1 dark:border-dark-600 dark:bg-dark-800" role="radiogroup">
+            <button v-for="op in teamQuotaOperations" :key="op.value" type="button" role="radio" :aria-checked="teamQuotaForm.operation === op.value" class="min-h-10 whitespace-nowrap rounded px-4 text-sm font-medium" :class="teamQuotaForm.operation === op.value ? 'bg-white text-primary-700 shadow-sm dark:bg-dark-700 dark:text-primary-300' : 'text-gray-600 dark:text-gray-400'" @click="teamQuotaForm.operation = op.value">{{ op.label }}</button>
+          </div>
+        </div>
+        <label class="block">
+          <span class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">{{ teamQuotaForm.operation === 'set' ? t('team.adminTeamQuotaTarget') : t('team.amount') }}</span>
+          <input v-model.number="teamQuotaForm.amount" type="number" step="any" min="0" required class="form-input w-full" />
+        </label>
+        <label class="block">
+          <span class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">{{ t('team.adminTeamQuotaSource') }}</span>
+          <select v-model="teamQuotaForm.source" class="form-input w-full"><option v-for="src in teamQuotaSources" :key="src.value" :value="src.value">{{ src.label }}</option></select>
+          <span class="mt-1.5 block text-xs text-gray-500 dark:text-gray-400">{{ teamQuotaSourceHint }}</span>
+        </label>
+        <label class="block"><span class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">{{ t('team.note') }}</span><textarea v-model.trim="teamQuotaForm.notes" maxlength="500" rows="2" class="form-input w-full resize-y" /></label>
+        <dl v-if="teamQuotaAmountValid" class="space-y-1 rounded-md border border-blue-200 bg-blue-50 p-3 text-sm dark:border-blue-800 dark:bg-blue-950">
+          <div class="flex items-center justify-between"><dt class="text-gray-700 dark:text-gray-300">{{ t('team.adminTeamQuotaNew') }}</dt><dd class="font-semibold tabular-nums" :class="teamQuotaPreview.memberAfter < 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-gray-100'">{{ formatMoney(teamQuotaPreview.memberAfter) }}</dd></div>
+          <div v-if="teamQuotaForm.source === 'owner_pool' && detail" class="flex items-center justify-between"><dt class="text-gray-700 dark:text-gray-300">{{ t('team.adminTeamQuotaOwnerAfter') }}</dt><dd class="font-semibold tabular-nums" :class="teamQuotaPreview.ownerAfter < 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-gray-100'">{{ formatMoney(teamQuotaPreview.ownerAfter) }}</dd></div>
+        </dl>
+      </form>
+      <template #footer><div class="flex justify-end gap-3"><button type="button" class="btn btn-secondary min-h-11" :disabled="submitting" @click="closeTeamQuota">{{ t('common.cancel') }}</button><button type="submit" form="admin-team-quota-form" class="btn btn-primary min-h-11" :disabled="submitting || !teamQuotaAmountValid">{{ t('team.confirmAdjustment') }}</button></div></template>
+    </BaseDialog>
+
     <BaseDialog :show="statusConfirmOpen" :title="statusTarget === 'suspended' ? t('team.suspend') : t('team.resume')" width="narrow" @close="closeStatusConfirmation">
       <form id="team-status-form" class="space-y-4" @submit.prevent="toggleStatus">
         <div class="rounded-md border border-gray-200 bg-gray-50 p-3 text-sm dark:border-dark-700 dark:bg-dark-800">
@@ -215,7 +250,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { adminTeamsAPI, type TeamAdminOverview, type TeamDashboard, type TeamMember, type TeamMemberUsageSummary, type TeamOwner, type TeamSummary, type TeamTransaction, type TeamUsageItem } from '@/api/team'
+import { adminTeamsAPI, type AdminTeamBalanceOperation, type AdminTeamBalanceSource, type TeamAdminOverview, type TeamDashboard, type TeamMember, type TeamMemberUsageSummary, type TeamOwner, type TeamSummary, type TeamTransaction, type TeamUsageItem } from '@/api/team'
 import { useAppStore } from '@/stores'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
@@ -260,12 +295,37 @@ const addUserSearchKey = ref(0)
 const remarkOpen = ref(false)
 const remarkMember = ref<TeamMember | null>(null)
 const memberRemark = ref('')
+const teamQuotaOpen = ref(false)
+const teamQuotaMember = ref<TeamMember | null>(null)
+const teamQuotaForm = reactive<{ operation: AdminTeamBalanceOperation; amount: number | null; source: AdminTeamBalanceSource; notes: string }>({ operation: 'add', amount: null, source: 'owner_pool', notes: '' })
 
 const detailTabs = computed(() => [
   { key: 'members' as const, label: t('team.members') },
   { key: 'usage' as const, label: t('team.usage') },
   { key: 'ledger' as const, label: t('team.ledger') }
 ])
+const teamQuotaOperations = computed(() => [
+  { value: 'set' as const, label: t('team.adminTeamQuotaSet') },
+  { value: 'add' as const, label: t('team.adminTeamQuotaAdd') },
+  { value: 'subtract' as const, label: t('team.adminTeamQuotaSubtract') }
+])
+const teamQuotaSources = computed(() => [
+  { value: 'owner_pool' as const, label: t('team.adminTeamQuotaSourceOwnerPool'), hint: t('team.adminTeamQuotaSourceOwnerPoolHint') },
+  { value: 'system' as const, label: t('team.adminTeamQuotaSourceSystem'), hint: t('team.adminTeamQuotaSourceSystemHint') }
+])
+const teamQuotaSourceHint = computed(() => teamQuotaSources.value.find((item) => item.value === teamQuotaForm.source)?.hint ?? '')
+const teamQuotaAmountValid = computed(() => {
+  const amount = teamQuotaForm.amount
+  if (typeof amount !== 'number' || !Number.isFinite(amount)) return false
+  return teamQuotaForm.operation === 'set' ? amount >= 0 : amount > 0
+})
+const teamQuotaPreview = computed(() => {
+  const current = teamQuotaMember.value?.team_balance ?? 0
+  const amount = teamQuotaForm.amount ?? 0
+  const delta = teamQuotaForm.operation === 'set' ? amount - current : teamQuotaForm.operation === 'add' ? amount : -amount
+  const ownerBalance = detail.value?.owner.balance ?? 0
+  return { delta, memberAfter: roundMoney(current + delta), ownerAfter: roundMoney(ownerBalance - delta) }
+})
 const detailMembers = computed(() => detail.value?.members ?? [])
 const memberSearchExcludedIds = computed(() => detail.value ? [detail.value.owner.user_id, ...detailMembers.value.map((member) => member.user_id)] : [])
 const usageMemberOptions = computed(() => detail.value ? [
@@ -365,6 +425,46 @@ async function saveAdminRemark() {
     await adminTeamsAPI.updateMemberRemark(current.id, remarkMember.value.user_id, memberRemark.value)
     remarkOpen.value = false
     await openDetails(current)
+    appStore.showSuccess(t('team.saved'))
+  } catch (error) { showError(error) } finally { submitting.value = false }
+}
+
+function openTeamQuota(member: TeamMember) {
+  teamQuotaMember.value = member
+  Object.assign(teamQuotaForm, { operation: 'add', amount: null, source: 'owner_pool', notes: '' })
+  teamQuotaOpen.value = true
+}
+
+function closeTeamQuota() {
+  if (submitting.value) return
+  teamQuotaOpen.value = false
+}
+
+async function saveTeamQuota() {
+  if (!detail.value || !teamQuotaMember.value) return
+  if (!teamQuotaAmountValid.value || teamQuotaForm.amount === null) {
+    appStore.showError(t('team.adminTeamQuotaAmountRequired'))
+    return
+  }
+  if (teamQuotaPreview.value.memberAfter < 0) {
+    appStore.showError(t('team.adminTeamQuotaNegative'))
+    return
+  }
+  if (teamQuotaForm.source === 'owner_pool' && teamQuotaPreview.value.delta > 0 && teamQuotaPreview.value.ownerAfter < 0) {
+    appStore.showError(t('team.adminTeamQuotaOwnerInsufficient'))
+    return
+  }
+  submitting.value = true
+  const current = detail.value
+  try {
+    await adminTeamsAPI.adjustMemberTeamBalance(current.id, teamQuotaMember.value.user_id, {
+      operation: teamQuotaForm.operation,
+      amount: teamQuotaForm.amount,
+      source: teamQuotaForm.source,
+      notes: teamQuotaForm.notes || undefined
+    })
+    teamQuotaOpen.value = false
+    await Promise.all([openDetails(current), loadTeams(teams.page), loadOverview()])
     appStore.showSuccess(t('team.saved'))
   } catch (error) { showError(error) } finally { submitting.value = false }
 }
@@ -486,6 +586,7 @@ function memberDisplayName(member: TeamMember | TeamOwner) {
   const remark = 'remark' in member && typeof member.remark === 'string' ? member.remark.trim() : ''
   return remark || member.username || member.email
 }
+function roundMoney(value: number) { const rounded = Math.round(value * 1e8) / 1e8; return Object.is(rounded, -0) ? 0 : rounded }
 function formatMoney(value: number) { return new Intl.NumberFormat(locale.value, { style: 'currency', currency: 'USD', maximumFractionDigits: 4 }).format(value || 0) }
 function formatNumber(value: number) { return new Intl.NumberFormat(locale.value, { notation: value > 999999 ? 'compact' : 'standard', maximumFractionDigits: 1 }).format(value || 0) }
 function formatDate(value: string) { return new Intl.DateTimeFormat(locale.value, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) }

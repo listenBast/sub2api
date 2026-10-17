@@ -258,6 +258,15 @@ export async function listTransactions(page = 1, pageSize = 20): Promise<Paginat
   return data
 }
 
+export type AdminTeamBalanceOperation = 'set' | 'add' | 'subtract'
+export type AdminTeamBalanceSource = 'owner_pool' | 'system'
+export interface AdminTeamBalanceAdjustment {
+  operation: AdminTeamBalanceOperation
+  amount: number
+  source: AdminTeamBalanceSource
+  notes?: string
+}
+
 export const adminTeamsAPI = {
   async list(params: { page?: number; page_size?: number; status?: string; search?: string }): Promise<PaginatedResponse<TeamSummary>> {
     const { data } = await apiClient.get<PaginatedResponse<TeamSummary>>('/admin/teams', { params })
@@ -291,6 +300,14 @@ export const adminTeamsAPI = {
   },
   async updateMemberRemark(teamId: number, memberId: number, remark: string): Promise<TeamMember> {
     const { data } = await apiClient.patch<TeamMember>(`/admin/teams/${teamId}/members/${memberId}/remark`, { remark })
+    return data
+  },
+  /**
+   * 管理员设置 / 增加 / 扣减成员团队额度。
+   * source=owner_pool（默认）从主账号余额划拨 / 归还；source=system 直接增发 / 扣除，不动主账号余额。
+   */
+  async adjustMemberTeamBalance(teamId: number, memberId: number, payload: AdminTeamBalanceAdjustment): Promise<TeamMember> {
+    const { data } = await apiClient.post<TeamMember>(`/admin/teams/${teamId}/members/${memberId}/team-balance`, payload)
     return data
   },
   /** 管理员把团队主账号更换为指定的已加入成员。 */
