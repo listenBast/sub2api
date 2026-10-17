@@ -4,7 +4,7 @@ import "context"
 
 // InvalidateAuthCacheByKey 清除指定 API Key 的认证缓存
 func (s *APIKeyService) InvalidateAuthCacheByKey(ctx context.Context, key string) {
-	if key == "" {
+	if s == nil || key == "" {
 		return
 	}
 	cacheKey := s.authCacheKey(key)
@@ -12,8 +12,9 @@ func (s *APIKeyService) InvalidateAuthCacheByKey(ctx context.Context, key string
 }
 
 // InvalidateAuthCacheByUserID 清除用户相关的 API Key 认证缓存
+// 允许 nil 接收者：计费链路通过接口断言调用，未注入 APIKeyService 时（typed nil）不得 panic。
 func (s *APIKeyService) InvalidateAuthCacheByUserID(ctx context.Context, userID int64) {
-	if userID <= 0 {
+	if s == nil || userID <= 0 {
 		return
 	}
 	keys, err := s.apiKeyRepo.ListKeysByUserID(ctx, userID)
@@ -25,7 +26,7 @@ func (s *APIKeyService) InvalidateAuthCacheByUserID(ctx context.Context, userID 
 
 // InvalidateAuthCacheByGroupID 清除分组相关的 API Key 认证缓存
 func (s *APIKeyService) InvalidateAuthCacheByGroupID(ctx context.Context, groupID int64) {
-	if groupID <= 0 {
+	if s == nil || groupID <= 0 {
 		return
 	}
 	keys, err := s.apiKeyRepo.ListKeysByGroupID(ctx, groupID)
