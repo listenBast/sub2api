@@ -84,7 +84,7 @@ func reserveInflightBalanceCtx(
 	if estimate <= 0 {
 		return ctx, inflightNoop, nil
 	}
-	res, err := billing.ReserveInflight(ctx, apiKey.User, apiKey.Group, subscription, estimate)
+	res, err := billing.ReserveInflightForAPIKey(ctx, apiKey, subscription, estimate)
 	if err != nil {
 		return ctx, inflightNoop, err
 	}

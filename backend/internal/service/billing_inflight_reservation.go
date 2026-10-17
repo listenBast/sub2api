@@ -235,7 +235,7 @@ func (s *BillingCacheService) InflightReservationFailClosedOnUnpriced() bool {
 
 // ReserveInflightBalance 简化封装：返回释放函数，不续期、不做计费交接（预留最长存活 TTL）。
 func (s *BillingCacheService) ReserveInflightBalance(ctx context.Context, user *User, group *Group, subscription *UserSubscription, estimate float64) (func(), error) {
-	r, err := s.reserveInflight(ctx, user, group, subscription, estimate, false, true)
+	r, err := s.reserveInflight(ctx, user, nil, group, subscription, estimate, false, true)
 	if err != nil {
 		return noopRelease, err
 	}
@@ -254,7 +254,17 @@ func (s *BillingCacheService) ReserveInflightBalance(ctx context.Context, user *
 // 开关关闭 / 简易模式 / 订阅模式 / estimate <= 0 / 缓存不支持 / 余额读取失败 / Redis 执行失败。
 // 仅当 Redis 明确判定 缓存余额 - 在途合计 < estimate（且已有在途请求）时返回 ErrInsufficientBalance。
 func (s *BillingCacheService) ReserveInflight(ctx context.Context, user *User, group *Group, subscription *UserSubscription, estimate float64) (*InflightReservation, error) {
-	return s.reserveInflight(ctx, user, group, subscription, estimate, true, true)
+	return s.reserveInflight(ctx, user, nil, group, subscription, estimate, true, true)
+}
+
+// ReserveInflightForAPIKey 同 ReserveInflight，但按 API Key 的扣费方式（fork：团队模式）
+// 计算可用资金：team_first / personal_first 为个人余额 + 团队额度，team_only 只算团队额度，
+// personal_only 只算个人余额，与 checkBalanceEligibility 和实际扣费保持一致。
+func (s *BillingCacheService) ReserveInflightForAPIKey(ctx context.Context, apiKey *APIKey, subscription *UserSubscription, estimate float64) (*InflightReservation, error) {
+	if apiKey == nil {
+		return nil, nil
+	}
+	return s.reserveInflight(ctx, apiKey.User, apiKey, apiKey.Group, subscription, estimate, true, true)
 }
 
 // inflightSubscriptionScope / inflightAPIKeyScope 是订阅 / API Key 维度在途预留的 scope 名。
@@ -297,7 +307,7 @@ func (s *BillingCacheService) reserveInflightScope(ctx context.Context, res *Inf
 	return res, pending
 }
 
-func (s *BillingCacheService) reserveInflight(ctx context.Context, user *User, group *Group, subscription *UserSubscription, estimate float64, renew, capped bool) (*InflightReservation, error) {
+func (s *BillingCacheService) reserveInflight(ctx context.Context, user *User, apiKey *APIKey, group *Group, subscription *UserSubscription, estimate float64, renew, capped bool) (*InflightReservation, error) {
 	cfg, ok := s.inflightReservationConfig()
 	if !ok || user == nil {
 		return nil, nil
@@ -316,9 +326,16 @@ func (s *BillingCacheService) reserveInflight(ctx context.Context, user *User, g
 		return nil, nil
 	}
 
-	balance, err := s.GetUserBalance(ctx, user.ID)
+	personal, err := s.GetUserBalance(ctx, user.ID)
 	if err != nil {
 		logger.LegacyPrintf("service.billing_cache", "Warning: inflight reservation balance read failed for user %d (fail-open): %v", user.ID, err)
+		return nil, nil
+	}
+	// 团队模式（fork）：预留比较的是本 Key 实际可扣的资金，而不只是个人余额，
+	// 否则个人余额为 0、靠团队额度消费的成员在并发请求时会被误判余额不足（403）。
+	balance, err := s.spendableBalance(ctx, user, apiKey, personal)
+	if err != nil {
+		logger.LegacyPrintf("service.billing_cache", "Warning: inflight reservation team balance read failed for user %d (fail-open): %v", user.ID, err)
 		return nil, nil
 	}
 

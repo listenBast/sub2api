@@ -806,7 +806,11 @@ func (s *BillingCacheService) ReserveFixedCharge(ctx context.Context, user *User
 	}
 	subscriptionBill := group != nil && group.IsSubscriptionType() && subscription != nil
 	if !subscriptionBill {
-		balance, err := s.GetUserBalance(ctx, user.ID)
+		personal, err := s.GetUserBalance(ctx, user.ID)
+		if err != nil {
+			return nil, ErrBillingServiceUnavailable.WithCause(err)
+		}
+		balance, err := s.spendableBalance(ctx, user, apiKey, personal)
 		if err != nil {
 			return nil, ErrBillingServiceUnavailable.WithCause(err)
 		}
@@ -814,7 +818,7 @@ func (s *BillingCacheService) ReserveFixedCharge(ctx context.Context, user *User
 			return nil, ErrInsufficientBalance
 		}
 	}
-	res, err := s.reserveInflight(ctx, user, group, subscription, amount, false, false)
+	res, err := s.reserveInflight(ctx, user, apiKey, group, subscription, amount, false, false)
 	if err != nil {
 		return nil, err
 	}
@@ -1084,6 +1088,31 @@ func (s *BillingCacheService) balanceCheckFailure(userID int64, err error) error
 	}
 	logger.LegacyPrintf("service.billing_cache", "ALERT: billing balance check failed for user %d: %v", userID, err)
 	return ErrBillingServiceUnavailable.WithCause(err)
+}
+
+// spendableBalance 按 API Key 的扣费方式（fork：团队模式）返回本 Key 实际可扣的资金：
+//   - personal_only：个人余额
+//   - team_only：团队额度
+//   - team_first / personal_first（含未设置 = team_first）：个人余额 + 团队额度
+//
+// 与 checkBalanceEligibility 及 deductUsageBillingBalance 的拆分规则一致。apiKey 为 nil 时按默认方式处理。
+// 团队额度只在认证快照显示持有额度时才读库（见 resolveTeamBalance）。
+func (s *BillingCacheService) spendableBalance(ctx context.Context, user *User, apiKey *APIKey, personal float64) (float64, error) {
+	mode := DefaultBalanceMode
+	if apiKey != nil {
+		mode = NormalizeBalanceMode(apiKey.BalanceMode)
+	}
+	if mode == BalanceModePersonalOnly {
+		return personal, nil
+	}
+	teamBalance, err := s.resolveTeamBalance(ctx, user)
+	if err != nil {
+		return 0, err
+	}
+	if mode == BalanceModeTeamOnly {
+		return teamBalance, nil
+	}
+	return personal + teamBalance, nil
 }
 
 // resolveTeamBalance 返回用户当前的团队额度（fork）。快照为 0 时无需读库，见 checkBalanceEligibility。
