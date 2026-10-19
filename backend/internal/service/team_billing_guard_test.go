@@ -251,3 +251,38 @@ func TestTeamBillingGuard_PersonalOnlyIgnoresTeamQuota(t *testing.T) {
 	require.InDelta(t, 15, team, 1e-9, "personal_only must not spend the team quota")
 	require.Zero(t, f.keys.byUser.Load())
 }
+
+// legacy 扣费路径的失效顺序必须与拆分前一致：先失效个人余额缓存，再按用户失效认证快照。
+type teamGuardOrderCache struct {
+	*teamGuardCache
+	order *[]string
+}
+
+func (c *teamGuardOrderCache) InvalidateUserBalance(context.Context, int64) error {
+	*c.order = append(*c.order, "balance")
+	return nil
+}
+
+type teamGuardOrderKeys struct {
+	apiKeyQuotaUpdaterStub
+	order *[]string
+}
+
+func (k *teamGuardOrderKeys) InvalidateAuthCacheByUserID(context.Context, int64) {
+	*k.order = append(*k.order, "auth")
+}
+
+func TestTeamBillingGuard_LegacyDeductionInvalidationOrder(t *testing.T) {
+	f := newTeamGuardFixture(t, "")
+	var order []string
+	cache := &teamGuardOrderCache{teamGuardCache: f.cache, order: &order}
+	cfg := &config.Config{}
+	svc := NewBillingCacheService(cache, f.ledger, nil, nil, nil, nil, cfg, nil)
+	t.Cleanup(svc.Stop)
+	p := f.billingParams(2)
+	p.APIKeyService = &teamGuardOrderKeys{order: &order}
+	postUsageBilling(context.Background(), p, &billingDeps{userRepo: f.ledger, billingCacheService: svc, deferredService: &DeferredService{}})
+	require.Equal(t, []string{"balance", "auth"}, order)
+	_, team := f.ledger.balances()
+	require.InDelta(t, 13, team, 1e-9)
+}

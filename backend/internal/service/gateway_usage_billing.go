@@ -159,13 +159,15 @@ func postUsageBilling(ctx context.Context, p *postUsageBillingParams, deps *bill
 		}
 	} else {
 		if cost.ActualCost > 0 {
-			if err := teamDeductLegacyBalance(billingCtx, p, deps, cost.ActualCost); err != nil { // sub2api-custom: team billing
+			deductErr := teamDeductLegacyBalance(billingCtx, p, deps, cost.ActualCost) // sub2api-custom: team billing
+			if err := deductErr; err != nil {                                          // sub2api-custom: team billing
 				slog.Error("deduct balance failed", "user_id", p.User.ID, "error", err)
 			} else if deps.billingCacheService != nil {
 				if err := deps.billingCacheService.InvalidateUserBalance(billingCtx, p.User.ID); err != nil {
 					slog.Warn("invalidate balance cache after legacy deduction failed", "user_id", p.User.ID, "error", err)
 				}
 			}
+			teamInvalidateAuthAfterLegacyDeduction(billingCtx, p, deductErr) // sub2api-custom: team billing
 		}
 	}
 

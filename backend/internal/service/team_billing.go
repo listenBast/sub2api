@@ -8,7 +8,7 @@ package service
 //   - billing_cache_service.go   CheckBillingEligibility → checkTeamBalanceEligibility
 //                                ReserveFixedCharge → teamSpendableUserBalance / withTeamBillingAPIKey
 //   - billing_inflight_reservation.go  reserveInflight → teamInflightSpendableBalance
-//   - gateway_usage_billing.go   legacy 扣费 → teamDeductLegacyBalance；
+//   - gateway_usage_billing.go   legacy 扣费 → teamDeductLegacyBalance / teamInvalidateAuthAfterLegacyDeduction；
 //                                buildUsageBillingCommand 写 BalanceMode；
 //                                finalizePostUsageBilling → teamInvalidateAuthAfterTeamCharge；
 //                                余额缓存同步 / 余额提醒 → teamCachePersonalCost / teamNotifyPersonalCost
@@ -201,7 +201,7 @@ type teamUserAuthCacheInvalidator interface {
 
 // teamDeductLegacyBalance 替换 legacy（非事务）路径的 userRepo.DeductBalance：
 // 仓储支持 BalanceModeDeductor 时按 Key 的扣费方式拆分扣费，否则退回个人余额扣费。
-// 扣费成功后按用户失效认证快照，让下次预检看到最新的团队额度。
+// 认证快照失效见 teamInvalidateAuthAfterLegacyDeduction。
 func teamDeductLegacyBalance(ctx context.Context, p *postUsageBillingParams, deps *billingDeps, amount float64) error {
 	var err error
 	mode := teamBalanceModeOf(p.APIKey)
@@ -210,13 +210,18 @@ func teamDeductLegacyBalance(ctx context.Context, p *postUsageBillingParams, dep
 	} else {
 		err = deps.userRepo.DeductBalance(ctx, p.User.ID, amount)
 	}
-	if err != nil {
-		return err
+	return err
+}
+
+// teamInvalidateAuthAfterLegacyDeduction：legacy 扣费成功后按用户失效认证快照，让下次预检看到最新的团队额度。
+// 必须在上游的 InvalidateUserBalance 之后调用，保持与拆分前完全相同的失效顺序（先余额缓存，后认证快照）。
+func teamInvalidateAuthAfterLegacyDeduction(ctx context.Context, p *postUsageBillingParams, deductErr error) {
+	if deductErr != nil {
+		return
 	}
 	if invalidator, ok := p.APIKeyService.(teamUserAuthCacheInvalidator); ok {
 		invalidator.InvalidateAuthCacheByUserID(ctx, p.User.ID)
 	}
-	return nil
 }
 
 // teamInvalidateAuthAfterTeamCharge：团队额度不进普通余额缓存。团队额度被扣过之后重建认证快照，
