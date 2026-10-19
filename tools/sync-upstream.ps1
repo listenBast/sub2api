@@ -37,9 +37,12 @@ $forkVersion = (Get-Content -LiteralPath $versionFile -Raw).Trim()
 $branch = 'sync/upstream-' + (Get-Date -Format 'yyyyMMdd-HHmmss')
 
 git switch --create $branch origin/main
+# .gitattributes: backend/cmd/server/VERSION merge=ours
+git config merge.ours.driver true
 git merge --no-ff --no-commit upstream/main
 if ($LASTEXITCODE -ne 0) {
-    Write-Host 'Merge conflicts found. Resolve them while preserving fork customizations, then commit the sync branch.'
+    Write-Host 'Merge conflicts found. Resolve them while preserving fork customizations (lines marked sub2api-custom), then commit the sync branch.'
+    Write-Host 'After resolving, run: cd backend; go test -tags=unit ./internal/service/ -run TestTeamBillingGuard_ -count=1'
     exit 1
 }
 

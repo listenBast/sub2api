@@ -352,13 +352,13 @@ func (s *APIKeyService) snapshotFromAPIKey(ctx context.Context, apiKey *APIKey) 
 		RateLimit5h: apiKey.RateLimit5h,
 		RateLimit1d: apiKey.RateLimit1d,
 		RateLimit7d: apiKey.RateLimit7d,
-		BalanceMode: NormalizeBalanceMode(apiKey.BalanceMode),
+		BalanceMode: NormalizeBalanceMode(apiKey.BalanceMode), // sub2api-custom: team billing
 		User: APIKeyAuthUserSnapshot{
 			ID:                         apiKey.User.ID,
 			Status:                     apiKey.User.Status,
 			Role:                       apiKey.User.Role,
 			Balance:                    apiKey.User.Balance,
-			TeamBalance:                apiKey.User.TeamBalance,
+			TeamBalance:                apiKey.User.TeamBalance, // sub2api-custom: team billing
 			Concurrency:                apiKey.User.Concurrency,
 			AllowedGroups:              apiKey.User.AllowedGroups,
 			Email:                      apiKey.User.Email,
@@ -463,13 +463,13 @@ func (s *APIKeyService) snapshotToAPIKey(key string, snapshot *APIKeyAuthSnapsho
 		RateLimit5h: snapshot.RateLimit5h,
 		RateLimit1d: snapshot.RateLimit1d,
 		RateLimit7d: snapshot.RateLimit7d,
-		BalanceMode: NormalizeBalanceMode(snapshot.BalanceMode),
+		BalanceMode: NormalizeBalanceMode(snapshot.BalanceMode), // sub2api-custom: team billing
 		User: &User{
 			ID:                         snapshot.User.ID,
 			Status:                     snapshot.User.Status,
 			Role:                       snapshot.User.Role,
 			Balance:                    snapshot.User.Balance,
-			TeamBalance:                snapshot.User.TeamBalance,
+			TeamBalance:                snapshot.User.TeamBalance, // sub2api-custom: team billing
 			Concurrency:                snapshot.User.Concurrency,
 			AllowedGroups:              snapshot.User.AllowedGroups,
 			Email:                      snapshot.User.Email,

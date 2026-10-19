@@ -20,3 +20,10 @@ backend/migrations/*.sql text eol=lf
 
 # Dockerfile
 Dockerfile text eol=lf
+
+# 二开版本号：合并上游时始终保留本仓库的 VERSION（sub2api-custom）。
+# merge=ours 需要本地注册驱动才生效（只需一次）：
+#   git config merge.ours.driver true
+# .github/workflows/upstream-sync.yml 与 tools/sync-upstream.ps1 已自动设置。
+# 注意：只有两边都改过该文件时才会调用驱动；同步脚本合并后仍会写回 fork 版本号兜底。
+backend/cmd/server/VERSION merge=ours

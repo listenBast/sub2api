@@ -25,6 +25,8 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # .gitattributes: backend/cmd/server/VERSION merge=ours（保留 fork 版本号）
+          git config merge.ours.driver true
           git remote add upstream https://github.com/Wei-Shaw/sub2api.git
           git fetch upstream main --tags
 
@@ -60,5 +62,5 @@ jobs:
             --base main \
             --head "$SYNC_BRANCH" \
             --title "同步上游 Wei-Shaw/sub2api" \
-            --body "自动合并上游 main。合并前请重点检查团队模式、余额事务、更新源和 VERSION 文件。" \
+            --body "自动合并上游 main。合并前请重点检查团队模式、余额事务、更新源和 VERSION 文件；请确认 CI 中团队计费守护测试（TestTeamBillingGuard_*）通过。" \
           || echo "::warning::同步分支已推送，但自动创建 PR 失败，请在仓库页面手动创建。"
