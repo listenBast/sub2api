@@ -129,7 +129,7 @@ func (s *UsageService) Create(ctx context.Context, req CreateUsageLogRequest) (*
 	if inserted && req.ActualCost > 0 {
 		var err error
 		if deductor, ok := s.userRepo.(BalanceModeDeductor); ok {
-			_, err = deductor.DeductBalanceByMode(txCtx, req.UserID, req.ActualCost, NormalizeBalanceMode(req.BalanceMode))
+			err = teamDeductBalanceForUsageLog(txCtx, deductor, req) // sub2api-custom: team billing
 		} else {
 			err = s.userRepo.UpdateBalance(txCtx, req.UserID, -req.ActualCost)
 		}

@@ -90,7 +90,8 @@ func TestApplyUsageBillingEffects_FlagsBalanceOverdraft(t *testing.T) {
 	}, result)
 	require.NoError(t, err)
 	require.NotNil(t, result.NewBalance)
-	require.InDelta(t, -5.0, *result.NewBalance, 0.000001)
+	require.InDelta(t, 0, *result.NewBalance, 0.000001)            // sub2api-custom: team billing（不透支：扣到 0 为止）
+	require.InDelta(t, 5.0, result.UncoveredBalanceCost, 0.000001) // sub2api-custom: team billing
 	require.True(t, result.BalanceOverdrafted)
 	require.NoError(t, tx.Commit())
 	require.NoError(t, mock.ExpectationsWereMet())

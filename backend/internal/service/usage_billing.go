@@ -175,6 +175,9 @@ type UsageBillingApplyResult struct {
 	PersonalBalanceCost float64
 	TeamBalanceCost     float64
 	NewTeamBalance      *float64
+	// UncoveredBalanceCost：不透支规则下两个资金池都不够、没有扣到的金额（由站点承担）。
+	// 大于 0 时 BalanceOverdrafted 也为 true（含义变为“未足额扣费”，余额本身不会变成负数）。
+	UncoveredBalanceCost float64
 }
 
 // BatchImageBalanceHoldCommand describes an idempotent balance hold operation.

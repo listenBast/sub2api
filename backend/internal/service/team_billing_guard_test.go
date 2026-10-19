@@ -4,7 +4,7 @@ package service
 
 // 团队计费守护测试（sub2api-custom）。每次合并上游后都要跑：
 //
-//	cd backend && go test -tags=unit ./internal/service/ -run 'TestTeamBillingGuard_' -count=1
+//	cd backend && go test -tags=unit ./internal/service/ -run 'TestTeamBillingGuard_|TestTeamNoOverdraft_' -count=1
 //
 // 场景固定为线上出过 403 的组合：团队成员个人余额 0、团队额度 15、Key 未设置扣费方式（默认 team_first）。
 // 覆盖 预检 → 并发在途预留 → 事务扣费 / legacy 扣费 → 缓存与认证快照失效 这条完整链路，
@@ -22,7 +22,7 @@ import (
 )
 
 // teamGuardLedger 是一个按扣费方式拆分扣费的内存账本，同时充当 UserRepository（含 BalanceModeDeductor）
-// 与 UsageBillingRepository。拆分规则与 repository.deductTeamUsageBillingBalance 的 SQL 一致（团队成员）。
+// 与 UsageBillingRepository。拆分规则与 repository.teamUsageBillingDeductSQL 一致（团队成员，不透支）。
 type teamGuardLedger struct {
 	mockUserRepo
 	UsageBillingRepository // 只实现 Apply
@@ -41,29 +41,33 @@ func (l *teamGuardLedger) GetByID(_ context.Context, id int64) (*User, error) {
 	return &User{ID: id, Balance: l.personal, TeamBalance: l.team}, nil
 }
 
-func (l *teamGuardLedger) split(amount float64, mode string) (personalPart, teamPart float64) {
+func (l *teamGuardLedger) split(amount float64, mode string) (personalPart, teamPart, uncovered float64) {
+	// 不透支：两个资金池都只扣到 0，已为负数的旧余额按 0 处理。
+	personalAvail, teamAvail := math.Max(l.personal, 0), math.Max(l.team, 0)
 	switch NormalizeBalanceMode(mode) {
 	case BalanceModePersonalOnly:
-		teamPart = 0
+		personalPart = math.Min(personalAvail, amount)
 	case BalanceModeTeamOnly:
-		teamPart = amount
+		teamPart = math.Min(teamAvail, amount)
 	case BalanceModePersonalFirst:
-		teamPart = amount - math.Min(math.Max(l.personal, 0), amount)
+		personalPart = math.Min(personalAvail, amount)
+		teamPart = math.Min(teamAvail, amount-personalPart)
 	default: // team_first
-		teamPart = math.Min(math.Max(l.team, 0), amount)
+		teamPart = math.Min(teamAvail, amount)
+		personalPart = math.Min(personalAvail, amount-teamPart)
 	}
-	personalPart = amount - teamPart
+	uncovered = amount - personalPart - teamPart
 	l.personal -= personalPart
 	l.team -= teamPart
-	return personalPart, teamPart
+	return personalPart, teamPart, uncovered
 }
 
 func (l *teamGuardLedger) DeductBalanceByMode(_ context.Context, _ int64, amount float64, mode string) (BalanceDeductionResult, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.modeCalls = append(l.modeCalls, mode)
-	personal, team := l.split(amount, mode)
-	return BalanceDeductionResult{Personal: personal, Team: team}, nil
+	personal, team, uncovered := l.split(amount, mode)
+	return BalanceDeductionResult{Personal: personal, Team: team, Uncovered: uncovered}, nil
 }
 
 func (l *teamGuardLedger) Apply(_ context.Context, cmd *UsageBillingCommand) (*UsageBillingApplyResult, error) {
@@ -72,12 +76,14 @@ func (l *teamGuardLedger) Apply(_ context.Context, cmd *UsageBillingCommand) (*U
 	l.cmds = append(l.cmds, cmd)
 	result := &UsageBillingApplyResult{Applied: true}
 	if cmd.BalanceCost > 0 {
-		personal, team := l.split(cmd.BalanceCost, cmd.BalanceMode)
+		personal, team, uncovered := l.split(cmd.BalanceCost, cmd.BalanceMode)
 		newBalance, newTeam := l.personal, l.team
 		result.NewBalance = &newBalance
 		result.NewTeamBalance = &newTeam
 		result.PersonalBalanceCost = personal
 		result.TeamBalanceCost = team
+		result.UncoveredBalanceCost = uncovered
+		result.BalanceOverdrafted = uncovered > 0
 	}
 	return result, nil
 }
@@ -247,7 +253,7 @@ func TestTeamBillingGuard_PersonalOnlyIgnoresTeamQuota(t *testing.T) {
 	require.True(t, applied)
 	require.Equal(t, BalanceModePersonalOnly, f.ledger.cmds[0].BalanceMode)
 	personal, team := f.ledger.balances()
-	require.InDelta(t, -3, personal, 1e-9)
+	require.InDelta(t, 0, personal, 1e-9, "no overdraft: personal balance never goes negative")
 	require.InDelta(t, 15, team, 1e-9, "personal_only must not spend the team quota")
 	require.Zero(t, f.keys.byUser.Load())
 }

@@ -10,32 +10,42 @@ package service
 //   - billing_inflight_reservation.go  reserveInflight → teamInflightSpendableBalance
 //   - gateway_usage_billing.go   legacy 扣费 → teamDeductLegacyBalance / teamInvalidateAuthAfterLegacyDeduction；
 //                                buildUsageBillingCommand 写 BalanceMode；
+//                                applyUsageBilling → teamReportUncoveredCharge（不透支：未扣到的金额记日志）；
 //                                finalizePostUsageBilling → teamInvalidateAuthAfterTeamCharge；
 //                                余额缓存同步 / 余额提醒 → teamCachePersonalCost / teamNotifyPersonalCost
 //   - usage_billing.go           UsageBillingCommand.BalanceMode 与 UsageBillingApplyResult 的团队字段
+//   - usage_service.go           Create 扣费 → teamDeductBalanceForUsageLog
+//
+// 不透支规则（用量扣费永远不会把个人余额或团队额度扣成负数）见
+// repository/team_usage_billing.go 的 teamUsageBillingDeductSQL。
 //
 // 对应的仓储层逻辑在 repository/team_usage_billing.go，鉴权中间件在
 // server/middleware/team_balance_auth.go。
 //
 // ⚠️ 每次合并上游（upstream-sync）后都必须运行团队计费守护测试：
 //
-//	cd backend && go test -tags=unit ./internal/service/ -run 'TestTeamBillingGuard_' -count=1
+//	cd backend && go test -tags=unit ./internal/service/ -run 'TestTeamBillingGuard_|TestTeamNoOverdraft_' -count=1
 //	cd backend && go test -tags=unit ./internal/repository/ ./internal/server/middleware/ -run 'Team' -count=1
+//	cd backend && go test -tags=integration ./internal/repository/ -run 'TestTeamNoOverdraftIntegration_' -count=1   # 需要 Docker
 //
 // 合并冲突时，先接受上游版本，再把带 sub2api-custom 标记的行补回去即可。
 
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 )
 
 // BalanceDeductionResult reports how a compatibility billing path split one
 // charge between the user's personal wallet and allocated team quota.
+// Uncovered is the part neither wallet could pay under the no-overdraft rule
+// (not charged, absorbed by the site).
 type BalanceDeductionResult struct {
-	Personal float64
-	Team     float64
+	Personal  float64
+	Team      float64
+	Uncovered float64
 }
 
 // BalanceModeDeductor is intentionally optional on UserRepository. Existing
@@ -203,14 +213,65 @@ type teamUserAuthCacheInvalidator interface {
 // 仓储支持 BalanceModeDeductor 时按 Key 的扣费方式拆分扣费，否则退回个人余额扣费。
 // 认证快照失效见 teamInvalidateAuthAfterLegacyDeduction。
 func teamDeductLegacyBalance(ctx context.Context, p *postUsageBillingParams, deps *billingDeps, amount float64) error {
-	var err error
 	mode := teamBalanceModeOf(p.APIKey)
-	if deductor, ok := deps.userRepo.(BalanceModeDeductor); ok {
-		_, err = deductor.DeductBalanceByMode(ctx, p.User.ID, amount, mode)
-	} else {
-		err = deps.userRepo.DeductBalance(ctx, p.User.ID, amount)
+	deductor, ok := deps.userRepo.(BalanceModeDeductor)
+	if !ok {
+		return deps.userRepo.DeductBalance(ctx, p.User.ID, amount)
 	}
-	return err
+	res, err := deductor.DeductBalanceByMode(ctx, p.User.ID, amount, mode)
+	if err != nil {
+		return err
+	}
+	var apiKeyID int64
+	if p.APIKey != nil {
+		apiKeyID = p.APIKey.ID
+	}
+	logUncoveredBalanceCharge("legacy", p.User.ID, apiKeyID, "", mode, amount, res)
+	return nil
+}
+
+// teamDeductBalanceForUsageLog 是 UsageService.Create 的扣费（不透支规则同 DeductBalanceByMode），
+// 未足额扣到时记录日志。
+func teamDeductBalanceForUsageLog(ctx context.Context, deductor BalanceModeDeductor, req CreateUsageLogRequest) error {
+	mode := NormalizeBalanceMode(req.BalanceMode)
+	res, err := deductor.DeductBalanceByMode(ctx, req.UserID, req.ActualCost, mode)
+	if err != nil {
+		return err
+	}
+	logUncoveredBalanceCharge("usage_log", req.UserID, req.APIKeyID, req.RequestID, mode, req.ActualCost, res)
+	return nil
+}
+
+// teamReportUncoveredCharge：统一计费事务提交后，若本次费用没有足额扣到（不透支规则下资金不足），
+// 记一条告警日志，方便站长核对少收的金额。usage_logs 里仍是实际用量费用，余额只反映实际扣到的部分。
+func teamReportUncoveredCharge(cmd *UsageBillingCommand, result *UsageBillingApplyResult) {
+	if cmd == nil || result == nil || result.UncoveredBalanceCost <= 0 {
+		return
+	}
+	logUncoveredBalanceCharge("usage_billing", cmd.UserID, cmd.APIKeyID, cmd.RequestID, NormalizeBalanceMode(cmd.BalanceMode), cmd.BalanceCost, BalanceDeductionResult{
+		Personal:  result.PersonalBalanceCost,
+		Team:      result.TeamBalanceCost,
+		Uncovered: result.UncoveredBalanceCost,
+	})
+}
+
+// logUncoveredBalanceCharge 记录“余额不足、未扣到”的金额。日志消息固定为
+// "billing.uncovered_balance_charge"，可以直接按它检索 / 统计站点少收的费用。
+func logUncoveredBalanceCharge(source string, userID, apiKeyID int64, requestID, mode string, amount float64, res BalanceDeductionResult) {
+	if res.Uncovered <= 0 {
+		return
+	}
+	slog.Warn("billing.uncovered_balance_charge",
+		"source", source,
+		"user_id", userID,
+		"api_key_id", apiKeyID,
+		"request_id", requestID,
+		"balance_mode", mode,
+		"actual_cost", amount,
+		"personal_charged", res.Personal,
+		"team_charged", res.Team,
+		"uncovered", res.Uncovered,
+	)
 }
 
 // teamInvalidateAuthAfterLegacyDeduction：legacy 扣费成功后按用户失效认证快照，让下次预检看到最新的团队额度。
@@ -241,7 +302,9 @@ func teamInvalidateAuthAfterTeamCharge(ctx context.Context, p *postUsageBillingP
 // teamCachePersonalCost：余额缓存只跟踪个人余额，团队额度部分不入缓存。
 // 有事务拆分结果时以实际扣到个人余额的金额为准；无结果（legacy 路径）时退回全额。
 func teamCachePersonalCost(p *postUsageBillingParams, result *UsageBillingApplyResult) float64 {
-	if result != nil && (result.PersonalBalanceCost > 0 || result.TeamBalanceCost > 0) {
+	// NewTeamBalance 非空说明走了团队拆分扣费：即使两边都是 0（资金不足、全部未扣到），
+	// 也必须以拆分结果为准，不能把全额从余额缓存里扣掉。
+	if result != nil && (result.NewTeamBalance != nil || result.PersonalBalanceCost > 0 || result.TeamBalanceCost > 0) {
 		return result.PersonalBalanceCost
 	}
 	return p.Cost.ActualCost
