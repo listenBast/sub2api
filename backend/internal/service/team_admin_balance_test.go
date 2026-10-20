@@ -151,7 +151,7 @@ func TestAdminAdjustMemberTeamBalance_SetCorrectsOverdraftAndInvalidatesCaches(t
 
 type teamAuthInvalidatorSpy struct{ userIDs []int64 }
 
-func (s *teamAuthInvalidatorSpy) InvalidateAuthCacheByKey(context.Context, string)     {}
+func (s *teamAuthInvalidatorSpy) InvalidateAuthCacheByKey(context.Context, string)    {}
 func (s *teamAuthInvalidatorSpy) InvalidateAuthCacheByGroupID(context.Context, int64) {}
 func (s *teamAuthInvalidatorSpy) InvalidateAuthCacheByUserID(_ context.Context, id int64) {
 	s.userIDs = append(s.userIDs, id)
