@@ -128,6 +128,15 @@ vi.mock('@/stores/app', () => ({
   }),
 }))
 
+// sub2api-custom: team billing — UsageView 读取团队上下文，测试中提供空团队
+vi.mock('@/stores/team', () => ({
+  useTeamStore: () => ({
+    isOwner: false,
+    context: null,
+    fetchContext: vi.fn().mockResolvedValue(undefined),
+  }),
+}))
+
 vi.mock('vue-i18n', async () => {
   const actual = await vi.importActual<typeof import('vue-i18n')>('vue-i18n')
   return {

@@ -142,9 +142,7 @@ func TestApplyUsageBillingEffects_DeletedAccountStillBillsBalance(t *testing.T) 
 	mock.ExpectBegin()
 	tx, err := db.BeginTx(ctx, nil)
 	require.NoError(t, err)
-	mock.ExpectQuery(conditionalBalanceDeductSQL).
-		WithArgs(10.0, int64(42)).
-		WillReturnRows(sqlmock.NewRows([]string{"balance"}).AddRow(90.0))
+	expectTeamSplitBalanceDeduct(mock, 10.0, 90.0) // sub2api-custom: team billing
 	mock.ExpectQuery(accountQuotaIncrementSQL).
 		WithArgs(4.0, int64(9)).
 		WillReturnRows(sqlmock.NewRows(accountQuotaStateColumns))
