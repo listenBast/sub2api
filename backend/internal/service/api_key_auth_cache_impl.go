@@ -16,7 +16,7 @@ import (
 
 // 注意（fork）：上游每次递增该版本号时，合并后需要保留 +100 的偏移，
 // 确保二开新增的 balance_mode / team_balance 字段总能触发快照重建。
-const apiKeyAuthSnapshotVersion = 124 // v24: group model_allowlist field (renamed from models_list_config, enforcing semantics); +100 fork: api key balance_mode + user team_balance
+const apiKeyAuthSnapshotVersion = 125 // v25: group image_count_billing switch (per-image billing on image endpoints); +100 fork: api key balance_mode + user team_balance
 
 type apiKeyAuthCacheConfig struct {
 	l1Size        int
@@ -395,6 +395,7 @@ func (s *APIKeyService) snapshotFromAPIKey(ctx context.Context, apiKey *APIKey) 
 			MonthlyLimitUSD:                 apiKey.Group.MonthlyLimitUSD,
 			AllowImageGeneration:            apiKey.Group.AllowImageGeneration,
 			AllowBatchImageGeneration:       apiKey.Group.AllowBatchImageGeneration,
+			ImageCountBilling:               apiKey.Group.ImageCountBilling,
 			ImageRateIndependent:            apiKey.Group.ImageRateIndependent,
 			ImageRateMultiplier:             apiKey.Group.ImageRateMultiplier,
 			ImagePrice1K:                    apiKey.Group.ImagePrice1K,
@@ -499,6 +500,7 @@ func (s *APIKeyService) snapshotToAPIKey(key string, snapshot *APIKeyAuthSnapsho
 			MonthlyLimitUSD:                 snapshot.Group.MonthlyLimitUSD,
 			AllowImageGeneration:            snapshot.Group.AllowImageGeneration,
 			AllowBatchImageGeneration:       snapshot.Group.AllowBatchImageGeneration,
+			ImageCountBilling:               snapshot.Group.ImageCountBilling,
 			ImageRateIndependent:            snapshot.Group.ImageRateIndependent,
 			ImageRateMultiplier:             snapshot.Group.ImageRateMultiplier,
 			ImagePrice1K:                    snapshot.Group.ImagePrice1K,
