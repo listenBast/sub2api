@@ -37,6 +37,9 @@ func newMCPRateLimitEndpoint(t *testing.T, role string, rpm int) (*gin.Engine, s
 	token := issueMCPRouteOAuthToken(t, oauth, cfg.MCP.PublicURL, scope, true)
 	h := mcpRouteHandlers()
 	h.MCPOAuth = handler.NewMCPOAuthHandler(oauth, nil, nil, settings, cfg)
+	// Fork: usage filters resolve team member scope before parsing dates, so the
+	// usage handler needs a non-nil receiver (nil team service = self-only scope).
+	h.Usage = handler.NewUsageHandler(nil, nil, nil, nil, nil)
 	h.APIKey = handler.NewAPIKeyHandler(service.NewAPIKeyService(&mcpRouteAPIKeyRepo{}, nil, nil, nil, nil, nil, nil))
 	router := gin.New()
 	RegisterMCPRoutes(router.Group("/api/v1"), h, middleware.AuditLogMiddleware(mcpRouteNext),
