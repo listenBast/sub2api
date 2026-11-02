@@ -66,7 +66,7 @@ importers:
         specifier: ^0.6.1
         version: 0.6.1(@types/sortablejs@1.15.9)
       vue-i18n:
-        specifier: ^11.4.14
+        specifier: ^11.4.16
         version: 11.4.16(vue@3.5.43(typescript@5.6.3))
       vue-router:
         specifier: ^4.2.5
@@ -76,7 +76,7 @@ importers:
         version: 0.18.5
     devDependencies:
       '@intlify/message-compiler':
-        specifier: ^11.4.14
+        specifier: 11.4.16
         version: 11.4.16
       '@types/dompurify':
         specifier: ^3.0.5
