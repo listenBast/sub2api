@@ -44475,6 +44475,7 @@ type TeamMembershipMutation struct {
 	addinvited_by     *int64
 	remark            *string
 	status            *string
+	is_admin          *bool
 	joined_at         *time.Time
 	exit_requested_at *time.Time
 	clearedFields     map[string]struct{}
@@ -44857,6 +44858,42 @@ func (m *TeamMembershipMutation) ResetStatus() {
 	m.status = nil
 }
 
+// SetIsAdmin sets the "is_admin" field.
+func (m *TeamMembershipMutation) SetIsAdmin(b bool) {
+	m.is_admin = &b
+}
+
+// IsAdmin returns the value of the "is_admin" field in the mutation.
+func (m *TeamMembershipMutation) IsAdmin() (r bool, exists bool) {
+	v := m.is_admin
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldIsAdmin returns the old "is_admin" field's value of the TeamMembership entity.
+// If the TeamMembership object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *TeamMembershipMutation) OldIsAdmin(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldIsAdmin is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldIsAdmin requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldIsAdmin: %w", err)
+	}
+	return oldValue.IsAdmin, nil
+}
+
+// ResetIsAdmin resets all changes to the "is_admin" field.
+func (m *TeamMembershipMutation) ResetIsAdmin() {
+	m.is_admin = nil
+}
+
 // SetJoinedAt sets the "joined_at" field.
 func (m *TeamMembershipMutation) SetJoinedAt(t time.Time) {
 	m.joined_at = &t
@@ -45043,7 +45080,7 @@ func (m *TeamMembershipMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *TeamMembershipMutation) Fields() []string {
-	fields := make([]string, 0, 9)
+	fields := make([]string, 0, 10)
 	if m.created_at != nil {
 		fields = append(fields, teammembership.FieldCreatedAt)
 	}
@@ -45064,6 +45101,9 @@ func (m *TeamMembershipMutation) Fields() []string {
 	}
 	if m.status != nil {
 		fields = append(fields, teammembership.FieldStatus)
+	}
+	if m.is_admin != nil {
+		fields = append(fields, teammembership.FieldIsAdmin)
 	}
 	if m.joined_at != nil {
 		fields = append(fields, teammembership.FieldJoinedAt)
@@ -45093,6 +45133,8 @@ func (m *TeamMembershipMutation) Field(name string) (ent.Value, bool) {
 		return m.Remark()
 	case teammembership.FieldStatus:
 		return m.Status()
+	case teammembership.FieldIsAdmin:
+		return m.IsAdmin()
 	case teammembership.FieldJoinedAt:
 		return m.JoinedAt()
 	case teammembership.FieldExitRequestedAt:
@@ -45120,6 +45162,8 @@ func (m *TeamMembershipMutation) OldField(ctx context.Context, name string) (ent
 		return m.OldRemark(ctx)
 	case teammembership.FieldStatus:
 		return m.OldStatus(ctx)
+	case teammembership.FieldIsAdmin:
+		return m.OldIsAdmin(ctx)
 	case teammembership.FieldJoinedAt:
 		return m.OldJoinedAt(ctx)
 	case teammembership.FieldExitRequestedAt:
@@ -45181,6 +45225,13 @@ func (m *TeamMembershipMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetStatus(v)
+		return nil
+	case teammembership.FieldIsAdmin:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetIsAdmin(v)
 		return nil
 	case teammembership.FieldJoinedAt:
 		v, ok := value.(time.Time)
@@ -45295,6 +45346,9 @@ func (m *TeamMembershipMutation) ResetField(name string) error {
 		return nil
 	case teammembership.FieldStatus:
 		m.ResetStatus()
+		return nil
+	case teammembership.FieldIsAdmin:
+		m.ResetIsAdmin()
 		return nil
 	case teammembership.FieldJoinedAt:
 		m.ResetJoinedAt()

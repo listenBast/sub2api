@@ -73,6 +73,8 @@ type TeamMemberView struct {
 	Username     string `json:"username"`
 	Remark       string `json:"remark"`
 	Status       string `json:"status"`
+	// IsAdmin 该成员是否为团队管理员（由主账号设置）。
+	IsAdmin bool `json:"is_admin"`
 	// Balance 成员个人余额（自己充值/兑换所得，不受团队管理）。
 	Balance float64 `json:"balance"`
 	// TeamBalance 主账号分配给该成员的团队额度。

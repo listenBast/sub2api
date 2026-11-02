@@ -90,6 +90,11 @@ func Status(v string) predicate.TeamMembership {
 	return predicate.TeamMembership(sql.FieldEQ(FieldStatus, v))
 }
 
+// IsAdmin applies equality check predicate on the "is_admin" field. It's identical to IsAdminEQ.
+func IsAdmin(v bool) predicate.TeamMembership {
+	return predicate.TeamMembership(sql.FieldEQ(FieldIsAdmin, v))
+}
+
 // JoinedAt applies equality check predicate on the "joined_at" field. It's identical to JoinedAtEQ.
 func JoinedAt(v time.Time) predicate.TeamMembership {
 	return predicate.TeamMembership(sql.FieldEQ(FieldJoinedAt, v))
@@ -388,6 +393,16 @@ func StatusEqualFold(v string) predicate.TeamMembership {
 // StatusContainsFold applies the ContainsFold predicate on the "status" field.
 func StatusContainsFold(v string) predicate.TeamMembership {
 	return predicate.TeamMembership(sql.FieldContainsFold(FieldStatus, v))
+}
+
+// IsAdminEQ applies the EQ predicate on the "is_admin" field.
+func IsAdminEQ(v bool) predicate.TeamMembership {
+	return predicate.TeamMembership(sql.FieldEQ(FieldIsAdmin, v))
+}
+
+// IsAdminNEQ applies the NEQ predicate on the "is_admin" field.
+func IsAdminNEQ(v bool) predicate.TeamMembership {
+	return predicate.TeamMembership(sql.FieldNEQ(FieldIsAdmin, v))
 }
 
 // JoinedAtEQ applies the EQ predicate on the "joined_at" field.

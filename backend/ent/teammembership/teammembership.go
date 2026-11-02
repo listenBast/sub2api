@@ -28,6 +28,8 @@ const (
 	FieldRemark = "remark"
 	// FieldStatus holds the string denoting the status field in the database.
 	FieldStatus = "status"
+	// FieldIsAdmin holds the string denoting the is_admin field in the database.
+	FieldIsAdmin = "is_admin"
 	// FieldJoinedAt holds the string denoting the joined_at field in the database.
 	FieldJoinedAt = "joined_at"
 	// FieldExitRequestedAt holds the string denoting the exit_requested_at field in the database.
@@ -64,6 +66,7 @@ var Columns = []string{
 	FieldInvitedBy,
 	FieldRemark,
 	FieldStatus,
+	FieldIsAdmin,
 	FieldJoinedAt,
 	FieldExitRequestedAt,
 }
@@ -93,6 +96,8 @@ var (
 	DefaultStatus string
 	// StatusValidator is a validator for the "status" field. It is called by the builders before save.
 	StatusValidator func(string) error
+	// DefaultIsAdmin holds the default value on creation for the "is_admin" field.
+	DefaultIsAdmin bool
 )
 
 // OrderOption defines the ordering options for the TeamMembership queries.
@@ -136,6 +141,11 @@ func ByRemark(opts ...sql.OrderTermOption) OrderOption {
 // ByStatus orders the results by the status field.
 func ByStatus(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldStatus, opts...).ToFunc()
+}
+
+// ByIsAdmin orders the results by the is_admin field.
+func ByIsAdmin(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldIsAdmin, opts...).ToFunc()
 }
 
 // ByJoinedAt orders the results by the joined_at field.

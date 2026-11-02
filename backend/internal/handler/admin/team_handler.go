@@ -13,11 +13,12 @@ import (
 )
 
 type TeamHandler struct {
-	teamService *service.TeamService
+	teamService  *service.TeamService
+	adminService service.AdminService
 }
 
-func NewTeamHandler(teamService *service.TeamService) *TeamHandler {
-	return &TeamHandler{teamService: teamService}
+func NewTeamHandler(teamService *service.TeamService, adminService service.AdminService) *TeamHandler {
+	return &TeamHandler{teamService: teamService, adminService: adminService}
 }
 
 func (h *TeamHandler) List(c *gin.Context) {

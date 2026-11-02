@@ -120,7 +120,7 @@ func (s *TeamService) Rename(ctx context.Context, ownerID int64, name string) (*
 	}
 	_, _ = s.client.TeamTransaction.Create().
 		SetTeamID(teamEntity.ID).
-		SetOperatorID(ownerID).
+		SetOperatorID(teamOperatorID(ctx, ownerID)).
 		SetAction(TeamActionRenamed).
 		SetOwnerBalanceBefore(owner.Balance).
 		SetOwnerBalanceAfter(owner.Balance).
@@ -383,7 +383,7 @@ func (s *TeamService) ReviewExit(ctx context.Context, ownerID, memberID int64, a
 	}
 	owner, _ := s.client.User.Get(ctx, ownerID)
 	if owner != nil {
-		_, _ = s.client.TeamTransaction.Create().SetTeamID(teamEntity.ID).SetOperatorID(ownerID).SetMemberID(memberID).
+		_, _ = s.client.TeamTransaction.Create().SetTeamID(teamEntity.ID).SetOperatorID(teamOperatorID(ctx, ownerID)).SetMemberID(memberID).
 			SetAction(TeamActionExitRejected).SetOwnerBalanceBefore(owner.Balance).SetOwnerBalanceAfter(owner.Balance).Save(ctx)
 	}
 	return nil
@@ -890,6 +890,7 @@ func (s *TeamService) transferOwnership(ctx context.Context, ownerOrTeamID, newO
 		SetTeamID(teamEntity.ID).
 		SetUserID(oldOwnerID).
 		SetInvitedBy(operatorID).
+		SetIsAdmin(false). // 前主账号转让后是普通成员，是否再任命由新主账号决定
 		SetStatus(TeamMembershipActive).
 		SetJoinedAt(now).
 		Save(txCtx); err != nil {
@@ -1030,7 +1031,7 @@ func resetTeamOnlyAPIKeys(ctx context.Context, client *dbent.Client, userID int6
 func createTeamTransaction(ctx context.Context, client *dbent.Client, teamID, operatorID int64, memberID *int64, action string, amount, ownerBefore, ownerAfter float64, memberBefore, memberAfter *float64, note string) error {
 	_, err := client.TeamTransaction.Create().
 		SetTeamID(teamID).
-		SetOperatorID(operatorID).
+		SetOperatorID(teamOperatorID(ctx, operatorID)).
 		SetNillableMemberID(memberID).
 		SetAction(action).
 		SetAmount(amount).
@@ -1054,6 +1055,7 @@ func teamMemberView(membership *dbent.TeamMembership, user *dbent.User) TeamMemb
 		Username:        user.Username,
 		Remark:          membership.Remark,
 		Status:          membership.Status,
+		IsAdmin:         membership.IsAdmin,
 		Balance:         user.Balance,
 		TeamBalance:     user.TeamBalance,
 		TotalBalance:    roundTeamAmount(user.Balance + user.TeamBalance),

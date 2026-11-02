@@ -1642,6 +1642,7 @@ var (
 		{Name: "invited_by", Type: field.TypeInt64},
 		{Name: "remark", Type: field.TypeString, Size: 100, Default: ""},
 		{Name: "status", Type: field.TypeString, Size: 20, Default: "invited"},
+		{Name: "is_admin", Type: field.TypeBool, Default: false},
 		{Name: "joined_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
 		{Name: "exit_requested_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
 		{Name: "team_id", Type: field.TypeInt64},
@@ -1655,13 +1656,13 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "team_memberships_teams_memberships",
-				Columns:    []*schema.Column{TeamMembershipsColumns[8]},
+				Columns:    []*schema.Column{TeamMembershipsColumns[9]},
 				RefColumns: []*schema.Column{TeamsColumns[0]},
 				OnDelete:   schema.Cascade,
 			},
 			{
 				Symbol:     "team_memberships_users_team_membership",
-				Columns:    []*schema.Column{TeamMembershipsColumns[9]},
+				Columns:    []*schema.Column{TeamMembershipsColumns[10]},
 				RefColumns: []*schema.Column{UsersColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
@@ -1670,17 +1671,17 @@ var (
 			{
 				Name:    "teammembership_user_id",
 				Unique:  true,
-				Columns: []*schema.Column{TeamMembershipsColumns[9]},
+				Columns: []*schema.Column{TeamMembershipsColumns[10]},
 			},
 			{
 				Name:    "teammembership_team_id_user_id",
 				Unique:  true,
-				Columns: []*schema.Column{TeamMembershipsColumns[8], TeamMembershipsColumns[9]},
+				Columns: []*schema.Column{TeamMembershipsColumns[9], TeamMembershipsColumns[10]},
 			},
 			{
 				Name:    "teammembership_team_id_status",
 				Unique:  false,
-				Columns: []*schema.Column{TeamMembershipsColumns[8], TeamMembershipsColumns[5]},
+				Columns: []*schema.Column{TeamMembershipsColumns[9], TeamMembershipsColumns[5]},
 			},
 		},
 	}

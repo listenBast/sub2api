@@ -43,12 +43,25 @@ func (s *TeamService) GetContext(ctx context.Context, userID int64) (*TeamContex
 		return nil, err
 	}
 	teamEntity := membership.Edges.Team
-	summary := teamSummaryFromEntity(teamEntity)
-	member := teamMemberView(membership, membership.Edges.User)
 	role := TeamRoleMember
 	if membership.Status == TeamMembershipInvited {
 		role = TeamMembershipInvited
 	}
+	// sub2api-custom: team admin —— 每次请求按数据库实时判定团队管理员，不依赖任何会话/令牌快照。
+	if membership.IsAdmin && membership.Status == TeamMembershipActive {
+		role = TeamRoleAdmin
+		full, loadErr := s.client.Team.Query().
+			Where(dbteam.IDEQ(teamEntity.ID)).
+			WithOwner().
+			WithMemberships(func(query *dbent.TeamMembershipQuery) { query.WithUser() }).
+			Only(ctx)
+		if loadErr != nil {
+			return nil, translateTeamError(loadErr)
+		}
+		teamEntity = full
+	}
+	summary := teamSummaryFromEntity(teamEntity)
+	member := teamMemberView(membership, membership.Edges.User)
 	return &TeamContext{
 		Role:                role,
 		MembershipStatus:    membership.Status,
@@ -371,6 +384,9 @@ func (s *TeamService) memberUsageSummary(ctx context.Context, teamEntity *dbent.
 		dbmembership.UserIDEQ(user.ID),
 	).Only(ctx); membershipErr == nil {
 		summary.Remark = membership.Remark
+		if membership.IsAdmin {
+			summary.Role = TeamRoleAdmin
+		}
 	}
 
 	query := s.client.UsageLog.Query().Where(dbusagelog.UserIDEQ(filter.MemberID))
@@ -534,7 +550,7 @@ func (s *TeamService) ResolveUsageUserIDs(ctx context.Context, userID, memberID 
 	if err != nil {
 		return nil, err
 	}
-	if teamContext.Role != TeamRoleOwner || teamContext.Team == nil {
+	if !IsTeamManagerRole(teamContext.Role) || teamContext.Team == nil {
 		if memberID > 0 && memberID != userID {
 			return nil, ErrTeamMemberNotFound
 		}

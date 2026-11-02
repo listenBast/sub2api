@@ -113,6 +113,20 @@ func (_u *TeamMembershipUpdate) SetNillableStatus(v *string) *TeamMembershipUpda
 	return _u
 }
 
+// SetIsAdmin sets the "is_admin" field.
+func (_u *TeamMembershipUpdate) SetIsAdmin(v bool) *TeamMembershipUpdate {
+	_u.mutation.SetIsAdmin(v)
+	return _u
+}
+
+// SetNillableIsAdmin sets the "is_admin" field if the given value is not nil.
+func (_u *TeamMembershipUpdate) SetNillableIsAdmin(v *bool) *TeamMembershipUpdate {
+	if v != nil {
+		_u.SetIsAdmin(*v)
+	}
+	return _u
+}
+
 // SetJoinedAt sets the "joined_at" field.
 func (_u *TeamMembershipUpdate) SetJoinedAt(v time.Time) *TeamMembershipUpdate {
 	_u.mutation.SetJoinedAt(v)
@@ -263,6 +277,9 @@ func (_u *TeamMembershipUpdate) sqlSave(ctx context.Context) (_node int, err err
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(teammembership.FieldStatus, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.IsAdmin(); ok {
+		_spec.SetField(teammembership.FieldIsAdmin, field.TypeBool, value)
 	}
 	if value, ok := _u.mutation.JoinedAt(); ok {
 		_spec.SetField(teammembership.FieldJoinedAt, field.TypeTime, value)
@@ -433,6 +450,20 @@ func (_u *TeamMembershipUpdateOne) SetStatus(v string) *TeamMembershipUpdateOne 
 func (_u *TeamMembershipUpdateOne) SetNillableStatus(v *string) *TeamMembershipUpdateOne {
 	if v != nil {
 		_u.SetStatus(*v)
+	}
+	return _u
+}
+
+// SetIsAdmin sets the "is_admin" field.
+func (_u *TeamMembershipUpdateOne) SetIsAdmin(v bool) *TeamMembershipUpdateOne {
+	_u.mutation.SetIsAdmin(v)
+	return _u
+}
+
+// SetNillableIsAdmin sets the "is_admin" field if the given value is not nil.
+func (_u *TeamMembershipUpdateOne) SetNillableIsAdmin(v *bool) *TeamMembershipUpdateOne {
+	if v != nil {
+		_u.SetIsAdmin(*v)
 	}
 	return _u
 }
@@ -617,6 +648,9 @@ func (_u *TeamMembershipUpdateOne) sqlSave(ctx context.Context) (_node *TeamMemb
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(teammembership.FieldStatus, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.IsAdmin(); ok {
+		_spec.SetField(teammembership.FieldIsAdmin, field.TypeBool, value)
 	}
 	if value, ok := _u.mutation.JoinedAt(); ok {
 		_spec.SetField(teammembership.FieldJoinedAt, field.TypeTime, value)

@@ -33,6 +33,8 @@ type TeamMembership struct {
 	Remark string `json:"remark,omitempty"`
 	// Status holds the value of the "status" field.
 	Status string `json:"status,omitempty"`
+	// IsAdmin holds the value of the "is_admin" field.
+	IsAdmin bool `json:"is_admin,omitempty"`
 	// JoinedAt holds the value of the "joined_at" field.
 	JoinedAt *time.Time `json:"joined_at,omitempty"`
 	// ExitRequestedAt holds the value of the "exit_requested_at" field.
@@ -81,6 +83,8 @@ func (*TeamMembership) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
+		case teammembership.FieldIsAdmin:
+			values[i] = new(sql.NullBool)
 		case teammembership.FieldID, teammembership.FieldTeamID, teammembership.FieldUserID, teammembership.FieldInvitedBy:
 			values[i] = new(sql.NullInt64)
 		case teammembership.FieldRemark, teammembership.FieldStatus:
@@ -149,6 +153,12 @@ func (_m *TeamMembership) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field status", values[i])
 			} else if value.Valid {
 				_m.Status = value.String
+			}
+		case teammembership.FieldIsAdmin:
+			if value, ok := values[i].(*sql.NullBool); !ok {
+				return fmt.Errorf("unexpected type %T for field is_admin", values[i])
+			} else if value.Valid {
+				_m.IsAdmin = value.Bool
 			}
 		case teammembership.FieldJoinedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
@@ -230,6 +240,9 @@ func (_m *TeamMembership) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("status=")
 	builder.WriteString(_m.Status)
+	builder.WriteString(", ")
+	builder.WriteString("is_admin=")
+	builder.WriteString(fmt.Sprintf("%v", _m.IsAdmin))
 	builder.WriteString(", ")
 	if v := _m.JoinedAt; v != nil {
 		builder.WriteString("joined_at=")

@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -54,7 +56,7 @@ func (h *TeamHandler) Upgrade(c *gin.Context) {
 }
 
 func (h *TeamHandler) Rename(c *gin.Context) {
-	userID, ok := currentTeamUserID(c)
+	userID, ctx, ok := currentTeamManager(c, h.teamService)
 	if !ok {
 		return
 	}
@@ -65,7 +67,7 @@ func (h *TeamHandler) Rename(c *gin.Context) {
 		response.BadRequest(c, "请求参数无效")
 		return
 	}
-	result, err := h.teamService.Rename(c.Request.Context(), userID, req.Name)
+	result, err := h.teamService.Rename(ctx, userID, req.Name)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
@@ -74,7 +76,7 @@ func (h *TeamHandler) Rename(c *gin.Context) {
 }
 
 func (h *TeamHandler) Invite(c *gin.Context) {
-	userID, ok := currentTeamUserID(c)
+	userID, ctx, ok := currentTeamManager(c, h.teamService)
 	if !ok {
 		return
 	}
@@ -85,7 +87,7 @@ func (h *TeamHandler) Invite(c *gin.Context) {
 		response.BadRequest(c, "请输入有效的成员邮箱")
 		return
 	}
-	member, err := h.teamService.Invite(c.Request.Context(), userID, req.Email)
+	member, err := h.teamService.Invite(ctx, userID, req.Email)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
@@ -114,7 +116,7 @@ func (h *TeamHandler) RespondInvitation(c *gin.Context) {
 }
 
 func (h *TeamHandler) AllocateBalance(c *gin.Context) {
-	ownerID, ok := currentTeamUserID(c)
+	ownerID, ctx, ok := currentTeamManager(c, h.teamService)
 	if !ok {
 		return
 	}
@@ -131,7 +133,7 @@ func (h *TeamHandler) AllocateBalance(c *gin.Context) {
 		response.BadRequest(c, "请输入非零的额度调整值")
 		return
 	}
-	member, err := h.teamService.AllocateBalance(c.Request.Context(), ownerID, memberID, req.Amount, req.Note)
+	member, err := h.teamService.AllocateBalance(ctx, ownerID, memberID, req.Amount, req.Note)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
@@ -153,7 +155,7 @@ func (h *TeamHandler) RequestExit(c *gin.Context) {
 }
 
 func (h *TeamHandler) ReviewExit(c *gin.Context) {
-	ownerID, ok := currentTeamUserID(c)
+	ownerID, ctx, ok := currentTeamManager(c, h.teamService)
 	if !ok {
 		return
 	}
@@ -169,7 +171,7 @@ func (h *TeamHandler) ReviewExit(c *gin.Context) {
 		response.BadRequest(c, "请求参数无效")
 		return
 	}
-	if err := h.teamService.ReviewExit(c.Request.Context(), ownerID, memberID, req.Approve); err != nil {
+	if err := h.teamService.ReviewExit(ctx, ownerID, memberID, req.Approve); err != nil {
 		response.ErrorFrom(c, err)
 		return
 	}
@@ -177,7 +179,7 @@ func (h *TeamHandler) ReviewExit(c *gin.Context) {
 }
 
 func (h *TeamHandler) RemoveMember(c *gin.Context) {
-	ownerID, ok := currentTeamUserID(c)
+	ownerID, ctx, ok := currentTeamManager(c, h.teamService)
 	if !ok {
 		return
 	}
@@ -186,7 +188,7 @@ func (h *TeamHandler) RemoveMember(c *gin.Context) {
 		response.BadRequest(c, "成员 ID 无效")
 		return
 	}
-	if err := h.teamService.RemoveMember(c.Request.Context(), ownerID, memberID); err != nil {
+	if err := h.teamService.RemoveMember(ctx, ownerID, memberID); err != nil {
 		response.ErrorFrom(c, err)
 		return
 	}
@@ -194,7 +196,7 @@ func (h *TeamHandler) RemoveMember(c *gin.Context) {
 }
 
 func (h *TeamHandler) UpdateMemberRemark(c *gin.Context) {
-	ownerID, ok := currentTeamUserID(c)
+	ownerID, ctx, ok := currentTeamManager(c, h.teamService)
 	if !ok {
 		return
 	}
@@ -210,7 +212,7 @@ func (h *TeamHandler) UpdateMemberRemark(c *gin.Context) {
 		response.BadRequest(c, "请求参数无效")
 		return
 	}
-	member, err := h.teamService.UpdateMemberRemark(c.Request.Context(), ownerID, memberID, req.Remark)
+	member, err := h.teamService.UpdateMemberRemark(ctx, ownerID, memberID, req.Remark)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
@@ -219,7 +221,7 @@ func (h *TeamHandler) UpdateMemberRemark(c *gin.Context) {
 }
 
 func (h *TeamHandler) UpdateMemberLimits(c *gin.Context) {
-	ownerID, ok := currentTeamUserID(c)
+	ownerID, ctx, ok := currentTeamManager(c, h.teamService)
 	if !ok {
 		return
 	}
@@ -236,7 +238,7 @@ func (h *TeamHandler) UpdateMemberLimits(c *gin.Context) {
 		response.BadRequest(c, "请求参数无效")
 		return
 	}
-	member, err := h.teamService.UpdateMemberLimits(c.Request.Context(), ownerID, memberID, req.Concurrency, req.RPMLimit)
+	member, err := h.teamService.UpdateMemberLimits(ctx, ownerID, memberID, req.Concurrency, req.RPMLimit)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
@@ -245,11 +247,11 @@ func (h *TeamHandler) UpdateMemberLimits(c *gin.Context) {
 }
 
 func (h *TeamHandler) Dissolve(c *gin.Context) {
-	ownerID, ok := currentTeamUserID(c)
+	ownerID, ctx, ok := currentTeamManager(c, h.teamService)
 	if !ok {
 		return
 	}
-	if err := h.teamService.Dissolve(c.Request.Context(), ownerID); err != nil {
+	if err := h.teamService.Dissolve(ctx, ownerID); err != nil {
 		response.ErrorFrom(c, err)
 		return
 	}
@@ -257,7 +259,7 @@ func (h *TeamHandler) Dissolve(c *gin.Context) {
 }
 
 func (h *TeamHandler) ListUsage(c *gin.Context) {
-	ownerID, ok := currentTeamUserID(c)
+	ownerID, ctx, ok := currentTeamManager(c, h.teamService)
 	if !ok {
 		return
 	}
@@ -266,7 +268,7 @@ func (h *TeamHandler) ListUsage(c *gin.Context) {
 		response.BadRequest(c, err.Error())
 		return
 	}
-	items, pageResult, err := h.teamService.ListUsage(c.Request.Context(), ownerID, filter)
+	items, pageResult, err := h.teamService.ListUsage(ctx, ownerID, filter)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
@@ -275,7 +277,7 @@ func (h *TeamHandler) ListUsage(c *gin.Context) {
 }
 
 func (h *TeamHandler) Dashboard(c *gin.Context) {
-	ownerID, ok := currentTeamUserID(c)
+	ownerID, ctx, ok := currentTeamManager(c, h.teamService)
 	if !ok {
 		return
 	}
@@ -284,7 +286,7 @@ func (h *TeamHandler) Dashboard(c *gin.Context) {
 		response.BadRequest(c, err.Error())
 		return
 	}
-	dashboard, err := h.teamService.GetDashboard(c.Request.Context(), ownerID, start, end)
+	dashboard, err := h.teamService.GetDashboard(ctx, ownerID, start, end)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
@@ -297,8 +299,17 @@ func (h *TeamHandler) ListTransactions(c *gin.Context) {
 	if !ok {
 		return
 	}
+	ctx := c.Request.Context()
+	// 主账号 / 管理员看团队全部流水；普通成员只看与自己相关的流水（沿用原有行为）。
+	if manager, err := h.teamService.ResolveManager(ctx, userID); err == nil {
+		userID = manager.OwnerID
+		ctx = service.WithTeamOperator(ctx, manager.UserID)
+	} else if !errors.Is(err, service.ErrTeamManagerRequired) && !errors.Is(err, service.ErrTeamNotFound) {
+		response.ErrorFrom(c, err)
+		return
+	}
 	page, pageSize := response.ParsePagination(c)
-	items, result, err := h.teamService.ListTransactions(c.Request.Context(), userID, page, pageSize)
+	items, result, err := h.teamService.ListTransactions(ctx, userID, page, pageSize)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
@@ -308,7 +319,7 @@ func (h *TeamHandler) ListTransactions(c *gin.Context) {
 
 // UsageSummary 主账号按成员汇总团队用量（余额、请求数、Token 数、实际消费）。
 func (h *TeamHandler) UsageSummary(c *gin.Context) {
-	ownerID, ok := currentTeamUserID(c)
+	ownerID, ctx, ok := currentTeamManager(c, h.teamService)
 	if !ok {
 		return
 	}
@@ -317,7 +328,7 @@ func (h *TeamHandler) UsageSummary(c *gin.Context) {
 		response.BadRequest(c, err.Error())
 		return
 	}
-	summary, err := h.teamService.GetUsageSummary(c.Request.Context(), ownerID, filter)
+	summary, err := h.teamService.GetUsageSummary(ctx, ownerID, filter)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
@@ -344,6 +355,21 @@ func (h *TeamHandler) TransferOwnership(c *gin.Context) {
 		return
 	}
 	response.Success(c, result)
+}
+
+// currentTeamManager 解析当前请求用户是否为团队管理者（主账号或管理员），每次请求读取数据库，
+// 角色变更立即生效。返回的 ownerID 交给既有的主账号服务方法，ctx 携带真实操作人用于流水审计。
+func currentTeamManager(c *gin.Context, teamService *service.TeamService) (int64, context.Context, bool) {
+	userID, ok := currentTeamUserID(c)
+	if !ok {
+		return 0, nil, false
+	}
+	manager, err := teamService.ResolveManager(c.Request.Context(), userID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return 0, nil, false
+	}
+	return manager.OwnerID, service.WithTeamOperator(c.Request.Context(), userID), true
 }
 
 func currentTeamUserID(c *gin.Context) (int64, bool) {

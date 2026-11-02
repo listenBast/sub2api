@@ -32,6 +32,8 @@ func (TeamMembership) Fields() []ent.Field {
 		field.Int64("invited_by"),
 		field.String("remark").MaxLen(100).Default(""),
 		field.String("status").MaxLen(20).Default("invited"),
+		// is_admin 团队管理员标记：由主账号设置，拥有除“转让主账号”外的全部主账号管理权限。
+		field.Bool("is_admin").Default(false),
 		field.Time("joined_at").
 			Optional().
 			Nillable().

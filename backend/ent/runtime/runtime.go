@@ -2030,6 +2030,10 @@ func init() {
 	teammembership.DefaultStatus = teammembershipDescStatus.Default.(string)
 	// teammembership.StatusValidator is a validator for the "status" field. It is called by the builders before save.
 	teammembership.StatusValidator = teammembershipDescStatus.Validators[0].(func(string) error)
+	// teammembershipDescIsAdmin is the schema descriptor for is_admin field.
+	teammembershipDescIsAdmin := teammembershipFields[5].Descriptor()
+	// teammembership.DefaultIsAdmin holds the default value on creation for the is_admin field.
+	teammembership.DefaultIsAdmin = teammembershipDescIsAdmin.Default.(bool)
 	teamtransactionFields := schema.TeamTransaction{}.Fields()
 	_ = teamtransactionFields
 	// teamtransactionDescAction is the schema descriptor for action field.

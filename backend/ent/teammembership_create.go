@@ -98,6 +98,20 @@ func (_c *TeamMembershipCreate) SetNillableStatus(v *string) *TeamMembershipCrea
 	return _c
 }
 
+// SetIsAdmin sets the "is_admin" field.
+func (_c *TeamMembershipCreate) SetIsAdmin(v bool) *TeamMembershipCreate {
+	_c.mutation.SetIsAdmin(v)
+	return _c
+}
+
+// SetNillableIsAdmin sets the "is_admin" field if the given value is not nil.
+func (_c *TeamMembershipCreate) SetNillableIsAdmin(v *bool) *TeamMembershipCreate {
+	if v != nil {
+		_c.SetIsAdmin(*v)
+	}
+	return _c
+}
+
 // SetJoinedAt sets the "joined_at" field.
 func (_c *TeamMembershipCreate) SetJoinedAt(v time.Time) *TeamMembershipCreate {
 	_c.mutation.SetJoinedAt(v)
@@ -187,6 +201,10 @@ func (_c *TeamMembershipCreate) defaults() {
 		v := teammembership.DefaultStatus
 		_c.mutation.SetStatus(v)
 	}
+	if _, ok := _c.mutation.IsAdmin(); !ok {
+		v := teammembership.DefaultIsAdmin
+		_c.mutation.SetIsAdmin(v)
+	}
 }
 
 // check runs all checks and user-defined validators on the builder.
@@ -221,6 +239,9 @@ func (_c *TeamMembershipCreate) check() error {
 		if err := teammembership.StatusValidator(v); err != nil {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "TeamMembership.status": %w`, err)}
 		}
+	}
+	if _, ok := _c.mutation.IsAdmin(); !ok {
+		return &ValidationError{Name: "is_admin", err: errors.New(`ent: missing required field "TeamMembership.is_admin"`)}
 	}
 	if len(_c.mutation.TeamIDs()) == 0 {
 		return &ValidationError{Name: "team", err: errors.New(`ent: missing required edge "TeamMembership.team"`)}
@@ -274,6 +295,10 @@ func (_c *TeamMembershipCreate) createSpec() (*TeamMembership, *sqlgraph.CreateS
 	if value, ok := _c.mutation.Status(); ok {
 		_spec.SetField(teammembership.FieldStatus, field.TypeString, value)
 		_node.Status = value
+	}
+	if value, ok := _c.mutation.IsAdmin(); ok {
+		_spec.SetField(teammembership.FieldIsAdmin, field.TypeBool, value)
+		_node.IsAdmin = value
 	}
 	if value, ok := _c.mutation.JoinedAt(); ok {
 		_spec.SetField(teammembership.FieldJoinedAt, field.TypeTime, value)
@@ -447,6 +472,18 @@ func (u *TeamMembershipUpsert) UpdateStatus() *TeamMembershipUpsert {
 	return u
 }
 
+// SetIsAdmin sets the "is_admin" field.
+func (u *TeamMembershipUpsert) SetIsAdmin(v bool) *TeamMembershipUpsert {
+	u.Set(teammembership.FieldIsAdmin, v)
+	return u
+}
+
+// UpdateIsAdmin sets the "is_admin" field to the value that was provided on create.
+func (u *TeamMembershipUpsert) UpdateIsAdmin() *TeamMembershipUpsert {
+	u.SetExcluded(teammembership.FieldIsAdmin)
+	return u
+}
+
 // SetJoinedAt sets the "joined_at" field.
 func (u *TeamMembershipUpsert) SetJoinedAt(v time.Time) *TeamMembershipUpsert {
 	u.Set(teammembership.FieldJoinedAt, v)
@@ -616,6 +653,20 @@ func (u *TeamMembershipUpsertOne) SetStatus(v string) *TeamMembershipUpsertOne {
 func (u *TeamMembershipUpsertOne) UpdateStatus() *TeamMembershipUpsertOne {
 	return u.Update(func(s *TeamMembershipUpsert) {
 		s.UpdateStatus()
+	})
+}
+
+// SetIsAdmin sets the "is_admin" field.
+func (u *TeamMembershipUpsertOne) SetIsAdmin(v bool) *TeamMembershipUpsertOne {
+	return u.Update(func(s *TeamMembershipUpsert) {
+		s.SetIsAdmin(v)
+	})
+}
+
+// UpdateIsAdmin sets the "is_admin" field to the value that was provided on create.
+func (u *TeamMembershipUpsertOne) UpdateIsAdmin() *TeamMembershipUpsertOne {
+	return u.Update(func(s *TeamMembershipUpsert) {
+		s.UpdateIsAdmin()
 	})
 }
 
@@ -960,6 +1011,20 @@ func (u *TeamMembershipUpsertBulk) SetStatus(v string) *TeamMembershipUpsertBulk
 func (u *TeamMembershipUpsertBulk) UpdateStatus() *TeamMembershipUpsertBulk {
 	return u.Update(func(s *TeamMembershipUpsert) {
 		s.UpdateStatus()
+	})
+}
+
+// SetIsAdmin sets the "is_admin" field.
+func (u *TeamMembershipUpsertBulk) SetIsAdmin(v bool) *TeamMembershipUpsertBulk {
+	return u.Update(func(s *TeamMembershipUpsert) {
+		s.SetIsAdmin(v)
+	})
+}
+
+// UpdateIsAdmin sets the "is_admin" field to the value that was provided on create.
+func (u *TeamMembershipUpsertBulk) UpdateIsAdmin() *TeamMembershipUpsertBulk {
+	return u.Update(func(s *TeamMembershipUpsert) {
+		s.UpdateIsAdmin()
 	})
 }
 
