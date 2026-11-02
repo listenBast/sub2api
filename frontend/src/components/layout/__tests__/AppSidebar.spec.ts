@@ -90,3 +90,16 @@ describe('AppSidebar MCP entry', () => {
     expect(componentSource).not.toMatch(/path: '\/settings\/mcp'[^\n]*PluginIcon/)
   })
 })
+
+describe('AppSidebar team management menu', () => {
+  it('is an expandable parent with list, members/admins and spend statistics children (like channel management)', () => {
+    const start = componentSource.indexOf("path: '/admin/teams',")
+    expect(start).toBeGreaterThan(-1)
+    const block = componentSource.slice(start, componentSource.indexOf("path: '/admin/groups'", start))
+    expect(block).toContain('expandOnly: true')
+    for (const child of ["'/admin/teams/list'", "'/admin/teams/members'", "'/admin/teams/usage'"]) {
+      expect(block).toContain(`path: ${child}`)
+    }
+    expect(componentSource).toContain('useTeamRoleSync(')
+  })
+})

@@ -832,6 +832,7 @@ export default {
     user: 'User',
     team: 'Team',
     teamMember: 'Team Member',
+    teamAdmin: 'Team Admin',
     username: 'Username',
     email: 'Email',
     status: 'Status',

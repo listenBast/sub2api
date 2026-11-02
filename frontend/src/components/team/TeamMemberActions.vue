@@ -20,8 +20,20 @@
     </button>
 
     <button
-      v-if="member.status === 'active'"
+      v-if="canSetAdmin && member.status === 'active'"
       type="button"
+      class="member-action text-gray-500 hover:bg-violet-50 hover:text-violet-600 dark:text-gray-400 dark:hover:bg-violet-900/20 dark:hover:text-violet-400"
+      data-testid="member-toggle-admin"
+      @click="$emit('toggle-admin', member)"
+    >
+      <Icon :name="member.is_admin ? 'xCircle' : 'userPlus'" size="sm" />
+      <span class="whitespace-nowrap">{{ member.is_admin ? t('team.unsetAdmin') : t('team.setAdmin') }}</span>
+    </button>
+
+    <button
+      v-if="canTransfer && member.status === 'active'"
+      type="button"
+      data-testid="member-transfer-owner"
       class="member-action text-gray-500 hover:bg-primary-50 hover:text-primary-600 dark:text-gray-400 dark:hover:bg-primary-900/20 dark:hover:text-primary-400"
       @click="$emit('transfer', member)"
     >
@@ -64,14 +76,19 @@ import { useI18n } from 'vue-i18n'
 import type { TeamMember } from '@/api/team'
 import Icon from '@/components/icons/Icon.vue'
 
-defineProps<{
+withDefaults(defineProps<{
   member: TeamMember
-}>()
+  /** 只有主账号可以转让主账号；管理员看不到该按钮。 */
+  canTransfer?: boolean
+  /** 只有主账号可以设置 / 取消团队管理员。 */
+  canSetAdmin?: boolean
+}>(), { canTransfer: true, canSetAdmin: false })
 
 defineEmits<{
   'edit-remark': [member: TeamMember]
   allocate: [member: TeamMember]
   transfer: [member: TeamMember]
+  'toggle-admin': [member: TeamMember]
   'review-exit': [member: TeamMember, approve: boolean]
   remove: [member: TeamMember]
 }>()

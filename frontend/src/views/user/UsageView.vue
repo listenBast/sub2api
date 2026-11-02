@@ -95,7 +95,7 @@
             </div>
           </div>
           <div v-else class="flex flex-1 flex-wrap items-end gap-4">
-            <div v-if="teamStore.isOwner" class="w-full sm:w-auto sm:min-w-[220px]">
+            <div v-if="teamStore.isOwner || teamStore.isAdmin" class="w-full sm:w-auto sm:min-w-[220px]">
               <label class="input-label">{{ t('team.members') }}</label>
               <Select v-model="filters.member_id" :options="teamMemberOptions" @change="applyFilters" />
             </div>
@@ -432,7 +432,7 @@ const modelOptions = computed<SelectOption[]>(() => [
 ])
 const teamMemberOptions = computed<SelectOption[]>(() => {
   const team = teamStore.context?.team
-  if (!teamStore.isOwner || !team) return []
+  if (!(teamStore.isOwner || teamStore.isAdmin) || !team) return []
 
   const options: SelectOption[] = [
     { value: null, label: t('team.filterMember') },

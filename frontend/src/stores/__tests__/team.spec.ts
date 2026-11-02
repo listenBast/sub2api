@@ -30,4 +30,23 @@ describe('team store', () => {
     await Promise.all([first, second])
     expect(getContext).toHaveBeenCalledTimes(1)
   })
+
+  it('derives owner / admin / manager flags from the role', async () => {
+    const store = useTeamStore()
+    for (const [role, owner, admin, manager] of [['owner', true, false, true], ['admin', false, true, true], ['member', false, false, false]] as const) {
+      getContext.mockResolvedValue({ role, membership_status: 'active', financial_restricted: false })
+      await store.fetchContext(true)
+      expect([store.isOwner, store.isAdmin, store.isManager]).toEqual([owner, admin, manager])
+    }
+  })
+
+  it('picks up a role change when the context is force-refreshed', async () => {
+    const store = useTeamStore()
+    getContext.mockResolvedValue({ role: 'member', membership_status: 'active', financial_restricted: false })
+    await store.fetchContext()
+    expect(store.isManager).toBe(false)
+    getContext.mockResolvedValue({ role: 'admin', membership_status: 'active', financial_restricted: false })
+    await store.fetchContext(true)
+    expect(store.isManager).toBe(true)
+  })
 })

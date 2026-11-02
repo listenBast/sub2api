@@ -836,6 +836,7 @@ export default {
     user: '用户',
     team: '团队',
     teamMember: '团队成员',
+    teamAdmin: '团队管理员',
     username: '用户名',
     email: '邮箱',
     status: '状态',

@@ -487,6 +487,10 @@ const routes: RouteRecordRaw[] = [
   },
   {
     path: '/admin/teams',
+    redirect: '/admin/teams/list'
+  },
+  {
+    path: '/admin/teams/list',
     name: 'AdminTeams',
     component: () => import('@/views/admin/TeamsView.vue'),
     meta: {
@@ -495,6 +499,30 @@ const routes: RouteRecordRaw[] = [
       title: 'Team Management',
       titleKey: 'team.adminTitle',
       descriptionKey: 'team.subtitle'
+    }
+  },
+  {
+    path: '/admin/teams/members',
+    name: 'AdminTeamMembers',
+    component: () => import('@/views/admin/TeamMembersView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: true,
+      title: 'Team Members & Admins',
+      titleKey: 'team.adminMembersTitle',
+      descriptionKey: 'team.adminMembersDescription'
+    }
+  },
+  {
+    path: '/admin/teams/usage',
+    name: 'AdminTeamUsage',
+    component: () => import('@/views/admin/TeamUsageStatsView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: true,
+      title: 'Team Spend Statistics',
+      titleKey: 'team.adminUsageTitle',
+      descriptionKey: 'team.adminUsageDescription'
     }
   },
   {

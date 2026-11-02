@@ -10,6 +10,10 @@ export const useTeamStore = defineStore('team', () => {
 
   const role = computed(() => context.value?.role ?? 'individual')
   const isOwner = computed(() => role.value === 'owner')
+  /** 团队管理员：拥有除转让主账号外的全部主账号权限。 */
+  const isAdmin = computed(() => role.value === 'admin')
+  /** 主账号或团队管理员，可使用团队管理功能。 */
+  const isManager = computed(() => role.value === 'owner' || role.value === 'admin')
   const isMember = computed(() => role.value === 'member')
   const hasInvitation = computed(() => role.value === 'invited')
   const financialRestricted = computed(() => context.value?.financial_restricted === true)
@@ -51,6 +55,8 @@ export const useTeamStore = defineStore('team', () => {
     loaded,
     role,
     isOwner,
+    isAdmin,
+    isManager,
     isMember,
     hasInvitation,
     financialRestricted,

@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   transactions: vi.fn(),
   deleteTeam: vi.fn(),
   adjustMemberTeamBalance: vi.fn(),
+  setMemberAdmin: vi.fn(),
   showError: vi.fn(),
   showSuccess: vi.fn()
 }))
@@ -47,7 +48,8 @@ vi.mock('@/api/team', () => ({
     transferOwner: vi.fn(),
     usageSummary: vi.fn(),
     deleteTeam: mocks.deleteTeam,
-    adjustMemberTeamBalance: mocks.adjustMemberTeamBalance
+    adjustMemberTeamBalance: mocks.adjustMemberTeamBalance,
+    setMemberAdmin: mocks.setMemberAdmin
   }
 }))
 
@@ -166,5 +168,95 @@ describe('admin team details', () => {
 
     expect(mocks.adjustMemberTeamBalance).toHaveBeenCalledWith(team.id, member.user_id, { operation: 'add', amount: 10, source: 'owner_pool', notes: undefined })
     expect(mocks.showSuccess).toHaveBeenCalledWith('team.saved')
+  })
+
+  const adminMember = {
+    membership_id: 3, user_id: 9, email: 'member@example.com', username: 'member', remark: '', status: 'active',
+    is_admin: false, balance: 0, team_balance: 5, total_balance: 5, frozen_balance: 0, concurrency: 1, rpm_limit: 0, created_at: '2026-07-28T00:00:00Z'
+  }
+  const mountView = () => mount(TeamsView, {
+    global: {
+      stubs: {
+        AppLayout: { template: '<div><slot /></div>' },
+        AdminUserSearchSelect: true,
+        AdminOwnerBalanceDialog: { props: ['show', 'team'], emits: ['saved', 'close'], template: '<div v-if="show" data-testid="owner-balance-dialog">{{ team?.owner.email }}<button data-testid="owner-balance-saved" @click="$emit(\'saved\', team.id)">saved</button></div>' },
+        BaseDialog: { props: ['show', 'title'], template: '<section v-if="show" data-testid="dialog"><h2>{{ title }}</h2><slot /><slot name="footer" /></section>' },
+        ConfirmDialog: { props: ['show', 'message'], emits: ['confirm'], template: '<button v-if="show" data-testid="confirm-action" @click="$emit(\'confirm\')">{{ message }}</button>' },
+        Pagination: true,
+        TeamLedgerPanel: true,
+        Icon: true
+      }
+    }
+  })
+
+  it('shows the owner balance in the list and opens the owner-balance dialog from the row, refreshing afterwards', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    expect(wrapper.get('[data-testid="team-owner-balance"]').text()).toContain('$12.00')
+
+    await wrapper.get('[data-testid="team-adjust-owner-balance"]').trigger('click')
+    expect(wrapper.get('[data-testid="owner-balance-dialog"]').text()).toContain('owner@example.com')
+
+    mocks.list.mockClear()
+    mocks.overview.mockClear()
+    await wrapper.get('[data-testid="owner-balance-saved"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="owner-balance-dialog"]').exists()).toBe(false)
+    expect(mocks.list).toHaveBeenCalled()
+    expect(mocks.overview).toHaveBeenCalled()
+  })
+
+  it('also offers the owner-balance action inside the team detail dialog', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.findAll('button').find((button) => button.text() === 'team.details')!.trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="team-detail-adjust-owner-balance"]').trigger('click')
+    expect(wrapper.find('[data-testid="owner-balance-dialog"]').exists()).toBe(true)
+  })
+
+  it('shows each member role and lets the site admin set and unset a team admin', async () => {
+    const team = { ...emptyTeam, members: [adminMember], active_member_count: 1 }
+    mocks.list.mockResolvedValue({ items: [team], total: 1, page: 1, pages: 1 })
+    mocks.get.mockResolvedValue(team)
+    mocks.setMemberAdmin.mockResolvedValue({ ...adminMember, is_admin: true })
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.findAll('button').find((button) => button.text() === 'team.details')!.trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('team.roleMember')
+
+    mocks.get.mockResolvedValue({ ...team, members: [{ ...adminMember, is_admin: true }] })
+    await wrapper.get('[data-testid="admin-member-toggle-admin"]').trigger('click')
+    expect(wrapper.get('[data-testid="confirm-action"]').text()).toContain('team.confirmSetAdmin')
+    await wrapper.get('[data-testid="confirm-action"]').trigger('click')
+    await flushPromises()
+    expect(mocks.setMemberAdmin).toHaveBeenCalledWith(team.id, adminMember.user_id, true)
+    expect(mocks.showSuccess).toHaveBeenCalledWith('team.adminGranted')
+    expect(wrapper.text()).toContain('team.roleAdmin')
+
+    mocks.get.mockResolvedValue(team)
+    await wrapper.get('[data-testid="admin-member-toggle-admin"]').trigger('click')
+    expect(wrapper.get('[data-testid="confirm-action"]').text()).toContain('team.confirmUnsetAdmin')
+    await wrapper.get('[data-testid="confirm-action"]').trigger('click')
+    await flushPromises()
+    expect(mocks.setMemberAdmin).toHaveBeenLastCalledWith(team.id, adminMember.user_id, false)
+    expect(mocks.showSuccess).toHaveBeenLastCalledWith('team.adminRevoked')
+  })
+
+  it('surfaces errors when setting an admin fails', async () => {
+    const team = { ...emptyTeam, members: [adminMember], active_member_count: 1 }
+    mocks.list.mockResolvedValue({ items: [team], total: 1, page: 1, pages: 1 })
+    mocks.get.mockResolvedValue(team)
+    mocks.setMemberAdmin.mockRejectedValue(new Error('不可操作'))
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.findAll('button').find((button) => button.text() === 'team.details')!.trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="admin-member-toggle-admin"]').trigger('click')
+    await wrapper.get('[data-testid="confirm-action"]').trigger('click')
+    await flushPromises()
+    expect(mocks.showError).toHaveBeenCalledWith('不可操作')
+    expect(mocks.showSuccess).not.toHaveBeenCalled()
   })
 })

@@ -55,7 +55,7 @@ const loadCharts = async () => { loadingCharts.value = true; try { const res = a
 const loadRecent = async () => { loadingUsage.value = true; try { const res = await usageAPI.getByDateRange(startDate.value, endDate.value); recentUsage.value = res.items.slice(0, 5) } catch (error) { console.error('Failed to load recent usage:', error) } finally { loadingUsage.value = false } }
 const loadPlatformQuotas = async () => { try { const data = await getMyPlatformQuotas(); platformQuotas.value = data.platform_quotas ?? [] } catch (error) { console.warn('Failed to load platform quotas:', error); platformQuotas.value = [] } }
 const refreshAll = (refreshTeam = true) => {
-  if (refreshTeam && teamStore.isOwner) void teamStore.fetchContext(true)
+  if (refreshTeam && (teamStore.isOwner || teamStore.isAdmin)) void teamStore.fetchContext(true)
   loadStats()
   loadCharts()
   loadRecent()

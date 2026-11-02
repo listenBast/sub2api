@@ -216,6 +216,9 @@ export default {
     auditLogs: 'Audit Logs',
     team: 'Team Center',
     teams: 'Teams',
+    teamList: 'Team List',
+    teamMembersAdmins: 'Members & Admins',
+    teamUsageStats: 'Spend Statistics',
   },
 
   // Auth

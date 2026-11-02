@@ -1,7 +1,7 @@
 import { apiClient } from './client'
 import type { PaginatedResponse } from '@/types'
 
-export type TeamRole = 'individual' | 'owner' | 'member' | 'invited'
+export type TeamRole = 'individual' | 'owner' | 'admin' | 'member' | 'invited'
 export type TeamStatus = 'active' | 'suspended'
 export type TeamMembershipStatus = 'invited' | 'active' | 'exit_pending'
 
@@ -19,6 +19,8 @@ export interface TeamMember {
   username: string
   remark: string
   status: TeamMembershipStatus
+  /** 是否为团队管理员（拥有除转让主账号外的全部主账号权限） */
+  is_admin?: boolean
   /** 成员个人余额（自己充值/兑换所得） */
   balance: number
   /** 主账号分配的团队额度 */
@@ -141,7 +143,7 @@ export interface TeamMemberUsageSummary {
   email: string
   username: string
   remark?: string
-  role: 'owner' | 'member'
+  role: 'owner' | 'admin' | 'member'
   balance: number
   team_balance: number
   total_balance: number
@@ -149,6 +151,41 @@ export interface TeamMemberUsageSummary {
   tokens: number
   total_cost: number
   actual_cost: number
+}
+
+/** 单个成员在指定时间范围内的花费统计。 */
+export interface TeamMemberSpend {
+  user_id: number
+  email: string
+  username: string
+  remark?: string
+  role: 'owner' | 'admin' | 'member'
+  status: string
+  requests: number
+  tokens: number
+  total_cost: number
+  actual_cost: number
+}
+
+export interface TeamMemberSpendStats {
+  team_id: number
+  start?: string | null
+  end?: string | null
+  members: TeamMemberSpend[]
+  /** 所有成员合计（user_id 为 0） */
+  totals: TeamMemberSpend
+}
+
+/** 花费统计时间范围；start 含、end 不含（RFC3339），或 YYYY-MM-DD（end 含当天）。 */
+export interface TeamSpendRangeParams {
+  start_date?: string
+  end_date?: string
+}
+
+export interface AdminOwnerBalanceAdjustment {
+  operation: 'add' | 'subtract'
+  balance: number
+  notes?: string
 }
 
 export function normalizeTeamMember(member: TeamMember): TeamMember {
@@ -223,6 +260,18 @@ export async function updateMemberRemark(memberId: number, remark: string): Prom
 
 export async function updateMemberLimits(memberId: number, limits: { concurrency?: number; rpm_limit?: number }): Promise<TeamMember> {
   const { data } = await apiClient.patch<TeamMember>(`/team/members/${memberId}/limits`, limits)
+  return data
+}
+
+/** 主账号设置 / 取消团队管理员（仅主账号可操作）。 */
+export async function setMemberAdmin(memberId: number, isAdmin: boolean): Promise<TeamMember> {
+  const { data } = await apiClient.put<TeamMember>(`/team/members/${memberId}/admin`, { is_admin: isAdmin })
+  return data
+}
+
+/** 主账号 / 团队管理员查看各成员在时间范围内的花费。 */
+export async function getMemberSpendStats(params: TeamSpendRangeParams = {}): Promise<TeamMemberSpendStats> {
+  const { data } = await apiClient.get<TeamMemberSpendStats>('/team/usage/members', { params })
   return data
 }
 
@@ -327,6 +376,21 @@ export const adminTeamsAPI = {
     const { data } = await apiClient.get<TeamMemberUsageSummary>(`/admin/teams/${teamId}/usage/summary`, { params })
     return data
   },
+  /** 平台管理员设置 / 取消团队管理员。 */
+  async setMemberAdmin(teamId: number, memberId: number, isAdmin: boolean): Promise<TeamMember> {
+    const { data } = await apiClient.put<TeamMember>(`/admin/teams/${teamId}/members/${memberId}/admin`, { is_admin: isAdmin })
+    return data
+  },
+  /** 平台管理员查看任意团队各成员在时间范围内的花费。 */
+  async memberSpendStats(teamId: number, params: TeamSpendRangeParams = {}): Promise<TeamMemberSpendStats> {
+    const { data } = await apiClient.get<TeamMemberSpendStats>(`/admin/teams/${teamId}/usage/members`, { params })
+    return data
+  },
+  /** 平台管理员增加 / 扣减团队主账号余额（复用用户余额调整接口，同样写入审计与兑换记录）。 */
+  async adjustOwnerBalance(teamId: number, payload: AdminOwnerBalanceAdjustment): Promise<unknown> {
+    const { data } = await apiClient.post<unknown>(`/admin/teams/${teamId}/owner-balance`, payload)
+    return data
+  },
   async transactions(teamId: number, page = 1, pageSize = 20): Promise<PaginatedResponse<TeamTransaction>> {
     const { data } = await apiClient.get<PaginatedResponse<TeamTransaction>>(`/admin/teams/${teamId}/transactions`, {
       params: { page, page_size: pageSize }
@@ -348,6 +412,8 @@ export default {
   updateMemberRemark,
   updateMemberLimits,
   dissolve,
+  setMemberAdmin,
+  getMemberSpendStats,
   transferOwnership,
   getDashboard,
   listUsage,

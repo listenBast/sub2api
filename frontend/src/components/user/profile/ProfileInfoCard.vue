@@ -238,10 +238,11 @@ const avatarUrl = computed(() => props.user?.avatar_url?.trim() || '')
 const accountRoleLabel = computed(() => {
   if (props.user?.role === 'admin') return t('profile.administrator')
   if (teamStore.role === 'owner') return t('profile.team')
+  if (teamStore.role === 'admin') return t('profile.teamAdmin')
   if (teamStore.role === 'member') return t('profile.teamMember')
   return t('profile.user')
 })
-const accountRoleClass = computed(() => props.user?.role === 'admin' || teamStore.role === 'owner' ? 'badge-primary' : 'badge-gray')
+const accountRoleClass = computed(() => props.user?.role === 'admin' || teamStore.role === 'owner' || teamStore.role === 'admin' ? 'badge-primary' : 'badge-gray')
 const displayName = computed(() => props.user?.username?.trim() || props.user?.email?.trim() || t('profile.user'))
 const primaryEmailDisplay = computed(() => {
   const email = props.user?.email?.trim() || ''

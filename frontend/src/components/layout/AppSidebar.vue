@@ -199,6 +199,7 @@ import { sanitizeUrl } from '@/utils/url'
 import { FeatureFlags, makeSidebarFlag } from '@/utils/featureFlags'
 import { resolveSiteBillingMode } from '@/utils/siteBillingMode'
 import { useBatchImageAccess } from '@/composables/useBatchImageAccess'
+import { useTeamRoleSync } from '@/composables/useTeamRoleSync'
 
 interface NavItem {
   path: string
@@ -245,6 +246,8 @@ const authStore = useAuthStore()
 const onboardingStore = useOnboardingStore()
 const adminSettingsStore = useAdminSettingsStore()
 const teamStore = useTeamStore()
+// 团队角色（主账号 / 管理员 / 成员）可能被他人实时调整：聚焦、可见、定时刷新。
+useTeamRoleSync({ enabled: () => !isAdmin.value })
 const { canUseBatchImage, refreshBatchImageAccess } = useBatchImageAccess()
 
 const sidebarCollapsed = computed(() => appStore.sidebarCollapsed)
@@ -790,7 +793,18 @@ const adminNavItems = computed((): NavItem[] => {
     { path: '/admin/dashboard', label: t('nav.dashboard'), icon: DashboardIcon },
     { path: '/admin/ops', label: t('nav.ops'), icon: ChartIcon, featureFlag: flagOpsMonitoring },
     { path: '/admin/users', label: t('nav.users'), icon: UsersIcon, hideInSimpleMode: true },
-    { path: '/admin/teams', label: t('nav.teams'), icon: UsersIcon, hideInSimpleMode: true },
+    {
+      path: '/admin/teams',
+      label: t('nav.teams'),
+      icon: UsersIcon,
+      hideInSimpleMode: true,
+      expandOnly: true,
+      children: [
+        { path: '/admin/teams/list', label: t('nav.teamList'), icon: UsersIcon },
+        { path: '/admin/teams/members', label: t('nav.teamMembersAdmins'), icon: UserIcon },
+        { path: '/admin/teams/usage', label: t('nav.teamUsageStats'), icon: ChartIcon },
+      ],
+    },
     { path: '/admin/groups', label: t('nav.groups'), icon: FolderIcon },
     {
       path: '/admin/channels',

@@ -70,7 +70,7 @@
       </section>
     </template>
 
-    <template v-else-if="context?.role === 'owner' && context.team">
+    <template v-else-if="(context?.role === 'owner' || context?.role === 'admin') && context.team">
       <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <label class="block text-xs font-medium uppercase text-gray-500 dark:text-gray-400">{{ t('team.teamName') }}</label>
@@ -101,6 +101,14 @@
         </div>
       </div>
 
+      <p
+        v-if="isAdminRole"
+        class="border-l-4 border-violet-500 bg-violet-50/60 px-4 py-3 text-sm text-violet-800 dark:bg-violet-950/20 dark:text-violet-200"
+        data-testid="team-admin-notice"
+      >
+        {{ t('team.managerNotice') }}
+      </p>
+
       <template v-if="activeTab === 'overview'">
         <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <MetricCard :label="t('team.teamBalance')" :value="formatMoney(context.team.total_balance)" />
@@ -128,10 +136,11 @@
         </section>
         <div class="hidden overflow-x-auto md:block">
           <table class="data-table min-w-[920px]">
-            <thead><tr><th>{{ t('team.members') }}</th><th>{{ t('team.status') }}</th><th>{{ t('team.personalBalance') }}</th><th>{{ t('team.teamQuota') }}</th><th>{{ t('team.availableBalance') }}</th><th>{{ t('team.joinedAt') }}</th><th class="text-right">{{ t('team.actions') }}</th></tr></thead>
+            <thead><tr><th>{{ t('team.members') }}</th><th>{{ t('team.role') }}</th><th>{{ t('team.status') }}</th><th>{{ t('team.personalBalance') }}</th><th>{{ t('team.teamQuota') }}</th><th>{{ t('team.availableBalance') }}</th><th>{{ t('team.joinedAt') }}</th><th class="text-right">{{ t('team.actions') }}</th></tr></thead>
             <tbody>
               <tr v-for="member in teamMembers" :key="member.membership_id">
                 <td><p class="font-medium text-gray-900 dark:text-white">{{ memberDisplayName(member) }}</p><p class="text-xs text-gray-500">{{ member.email }}</p></td>
+                <td><TeamRoleBadge :role="member.is_admin ? 'admin' : 'member'" /></td>
                 <td><span class="status-badge">{{ membershipStatusLabel(member.status) }}</span></td>
                 <td class="tabular-nums">{{ formatMoney(member.balance) }}</td>
                 <td class="tabular-nums">{{ formatMoney(member.team_balance) }}</td>
@@ -140,6 +149,9 @@
                 <td>
                   <TeamMemberActions
                     :member="member"
+                    :can-transfer="isOwnerRole"
+                    :can-set-admin="isOwnerRole"
+                    @toggle-admin="openAdminToggle"
                     @edit-remark="openRemark"
                     @allocate="openAllocation"
                     @transfer="openConfirmation('transfer', $event)"
@@ -148,7 +160,7 @@
                   />
                 </td>
               </tr>
-              <tr v-if="!teamMembers.length"><td colspan="7" class="py-10 text-center text-gray-500">{{ t('team.empty') }}</td></tr>
+              <tr v-if="!teamMembers.length"><td colspan="8" class="py-10 text-center text-gray-500">{{ t('team.empty') }}</td></tr>
             </tbody>
           </table>
         </div>
@@ -159,7 +171,10 @@
                 <p class="break-words font-medium text-gray-900 dark:text-white">{{ memberDisplayName(member) }}</p>
                 <p class="mt-1 break-all text-xs text-gray-500 dark:text-gray-400">{{ member.email }}</p>
               </div>
-              <span class="status-badge shrink-0">{{ membershipStatusLabel(member.status) }}</span>
+              <div class="flex shrink-0 flex-col items-end gap-1">
+                <TeamRoleBadge v-if="member.is_admin" role="admin" />
+                <span class="status-badge">{{ membershipStatusLabel(member.status) }}</span>
+              </div>
             </div>
             <dl class="mt-4 grid grid-cols-2 gap-3 text-sm">
               <div><dt class="text-gray-500 dark:text-gray-400">{{ t('team.personalBalance') }}</dt><dd class="mt-1 tabular-nums text-gray-900 dark:text-white">{{ formatMoney(member.balance) }}</dd></div>
@@ -170,7 +185,10 @@
             <div class="mt-4 overflow-x-auto border-t border-gray-100 pt-3 dark:border-dark-700">
               <TeamMemberActions
                 :member="member"
+                :can-transfer="isOwnerRole"
+                :can-set-admin="isOwnerRole"
                 class="justify-start"
+                @toggle-admin="openAdminToggle"
                 @edit-remark="openRemark"
                 @allocate="openAllocation"
                 @transfer="openConfirmation('transfer', $event)"
@@ -209,6 +227,12 @@
         </div>
         <Pagination v-if="usage.pages > 1" :total="usage.total" :page="usage.page" :page-size="20" :show-page-size-selector="false" @update:page="loadUsage" />
       </template>
+
+      <TeamMemberSpendPanel
+        v-else-if="activeTab === 'spend'"
+        :load="teamAPI.getMemberSpendStats"
+        @error="showError"
+      />
 
       <TeamLedgerPanel
         v-else
@@ -275,6 +299,8 @@ import Icon from '@/components/icons/Icon.vue'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import TeamLedgerPanel from '@/components/team/TeamLedgerPanel.vue'
 import TeamMemberActions from '@/components/team/TeamMemberActions.vue'
+import TeamMemberSpendPanel from '@/components/team/TeamMemberSpendPanel.vue'
+import TeamRoleBadge from '@/components/team/TeamRoleBadge.vue'
 import TeamUsageSummaryCards from '@/components/team/TeamUsageSummaryCards.vue'
 
 const { t, locale } = useI18n()
@@ -282,12 +308,14 @@ const appStore = useAppStore()
 const authStore = useAuthStore()
 const teamStore = useTeamStore()
 const context = computed(() => teamStore.context)
+const isOwnerRole = computed(() => context.value?.role === 'owner')
+const isAdminRole = computed(() => context.value?.role === 'admin')
 const teamMembers = computed(() => context.value?.team?.members ?? [])
 const teamName = ref('')
 const inviteEmail = ref('')
 const submitting = ref(false)
 const renaming = ref(false)
-const activeTab = ref<'overview' | 'members' | 'usage' | 'ledger'>('overview')
+const activeTab = ref<'overview' | 'members' | 'usage' | 'spend' | 'ledger'>('overview')
 const transactions = ref<TeamTransaction[]>([])
 const transactionsPage = ref(1)
 const transactionsTotal = ref(0)
@@ -305,7 +333,7 @@ const remarkOpen = ref(false)
 const remarkMember = ref<TeamMember | null>(null)
 const memberRemark = ref('')
 const confirmationOpen = ref(false)
-const confirmationType = ref<'exit' | 'remove' | 'dissolve' | 'transfer'>('exit')
+const confirmationType = ref<'exit' | 'remove' | 'dissolve' | 'transfer' | 'setAdmin' | 'unsetAdmin'>('exit')
 const confirmationMember = ref<TeamMember | null>(null)
 const usageMemberOptions = computed(() => {
   const team = context.value?.team
@@ -317,17 +345,22 @@ const tabs = computed(() => [
   { key: 'overview' as const, label: t('team.overview') },
   { key: 'members' as const, label: t('team.members') },
   { key: 'usage' as const, label: t('team.usage') },
+  { key: 'spend' as const, label: t('team.spendStats') },
   { key: 'ledger' as const, label: t('team.ledger') }
 ])
 const confirmationTitle = computed(() => {
   if (confirmationType.value === 'exit') return t('team.requestExit')
   if (confirmationType.value === 'dissolve') return t('team.dissolve')
   if (confirmationType.value === 'transfer') return t('team.transferOwnerTitle')
+  if (confirmationType.value === 'setAdmin') return t('team.setAdmin')
+  if (confirmationType.value === 'unsetAdmin') return t('team.unsetAdmin')
   return confirmationMember.value?.status === 'invited' ? t('team.cancelInvite') : t('team.remove')
 })
 const confirmationMessage = computed(() => {
   if (confirmationType.value === 'exit') return t('team.confirmExit')
   if (confirmationType.value === 'dissolve') return t('team.confirmDissolve')
+  if (confirmationType.value === 'setAdmin') return t('team.confirmSetAdmin', { member: confirmationMember.value ? memberDisplayName(confirmationMember.value) : '-' })
+  if (confirmationType.value === 'unsetAdmin') return t('team.confirmUnsetAdmin', { member: confirmationMember.value ? memberDisplayName(confirmationMember.value) : '-' })
   if (confirmationType.value === 'transfer') return t('team.confirmTransferOwner', { member: confirmationMember.value ? memberDisplayName(confirmationMember.value) : '-' })
   return confirmationMember.value?.status === 'invited' ? t('team.confirmCancelInvite') : t('team.confirmRemove')
 })
@@ -355,15 +388,16 @@ async function refreshContext() {
   }
 }
 
-async function runAction(action: () => Promise<unknown>, success = true) {
+async function runAction(action: () => Promise<unknown>, success: boolean | string = true) {
   submitting.value = true
   try {
     await action()
     await refreshContext()
     await authStore.refreshUser().catch(() => undefined)
-    if (success) appStore.showSuccess(t('team.saved'))
+    if (success) appStore.showSuccess(typeof success === 'string' ? success : t('team.saved'))
   } catch (error) {
     showError(error)
+    await syncRoleAfterError(error)
   } finally {
     submitting.value = false
   }
@@ -446,13 +480,19 @@ async function reviewMemberExit(member: TeamMember, approve: boolean) {
   await runAction(() => teamAPI.reviewExit(member.user_id, approve))
 }
 
-function openConfirmation(type: 'exit' | 'remove' | 'dissolve' | 'transfer', member?: TeamMember) { confirmationType.value = type; confirmationMember.value = member ?? null; confirmationOpen.value = true }
+type ConfirmationType = typeof confirmationType.value
+function openAdminToggle(member: TeamMember) { openConfirmation(member.is_admin ? 'unsetAdmin' : 'setAdmin', member) }
+function openConfirmation(type: ConfirmationType, member?: TeamMember) { confirmationType.value = type; confirmationMember.value = member ?? null; confirmationOpen.value = true }
 async function confirmAction() {
   confirmationOpen.value = false
   if (confirmationType.value === 'exit') await runAction(() => teamAPI.requestExit())
   else if (confirmationType.value === 'dissolve') await runAction(() => teamAPI.dissolve())
   else if (confirmationType.value === 'transfer' && confirmationMember.value) {
     await runAction(async () => teamStore.setContext(await teamAPI.transferOwnership(confirmationMember.value!.user_id)))
+  }
+  else if ((confirmationType.value === 'setAdmin' || confirmationType.value === 'unsetAdmin') && confirmationMember.value) {
+    const enable = confirmationType.value === 'setAdmin'
+    await runAction(async () => { await teamAPI.setMemberAdmin(confirmationMember.value!.user_id, enable) }, enable ? t('team.adminGranted') : t('team.adminRevoked'))
   }
   else if (confirmationMember.value) await runAction(() => teamAPI.removeMember(confirmationMember.value!.user_id))
 }
@@ -469,6 +509,13 @@ function memberDisplayName(member: TeamMember | TeamOwner) {
 function formatMoney(value: number) { return new Intl.NumberFormat(locale.value, { style: 'currency', currency: 'USD', maximumFractionDigits: 4 }).format(value || 0) }
 function formatNumber(value: number) { return new Intl.NumberFormat(locale.value, { notation: value > 999999 ? 'compact' : 'standard', maximumFractionDigits: 1 }).format(value || 0) }
 function formatDate(value?: string | null) { return value ? new Intl.DateTimeFormat(locale.value, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : '-' }
+// 角色实时变化：操作被服务端以“不是管理者”拒绝时，立即重新拉取团队上下文，让界面降级到真实角色。
+async function syncRoleAfterError(error: unknown) {
+  const reason = (error as { reason?: string; code?: string })?.reason
+  if (reason === 'TEAM_MANAGER_REQUIRED' || reason === 'TEAM_OWNER_REQUIRED') {
+    await refreshContext()
+  }
+}
 function showError(error: unknown) { appStore.showError((error as { message?: string })?.message || t('common.unknownError')) }
 </script>
 

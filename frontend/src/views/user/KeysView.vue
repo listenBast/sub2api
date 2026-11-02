@@ -1275,7 +1275,7 @@ interface GroupOption {
 const appStore = useAppStore()
 const onboardingStore = useOnboardingStore()
 const teamStore = useTeamStore()
-const showBalanceMode = computed(() => teamStore.isOwner || teamStore.isMember)
+const showBalanceMode = computed(() => teamStore.isOwner || teamStore.isAdmin || teamStore.isMember)
 const balanceModeOptions = computed(() =>
   API_KEY_BALANCE_MODES.map((mode) => ({ value: mode, label: t(`keys.balanceModes.${mode}`) }))
 )

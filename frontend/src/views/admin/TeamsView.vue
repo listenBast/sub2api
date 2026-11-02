@@ -29,11 +29,11 @@
         <tbody>
           <tr v-for="team in teams.items" :key="team.id">
             <td class="font-medium text-gray-900 dark:text-white">{{ team.name }}</td>
-            <td><p>{{ team.owner.username || team.owner.email }}</p><p class="text-xs text-gray-500">{{ team.owner.email }}</p></td>
+            <td><p>{{ team.owner.username || team.owner.email }}</p><p class="text-xs text-gray-500">{{ team.owner.email }}</p><p class="text-xs tabular-nums text-gray-500" data-testid="team-owner-balance">{{ t('team.ownerBalanceCurrent') }}: {{ formatMoney(team.owner.balance) }}</p></td>
             <td><span class="status-badge" :class="team.status === 'active' ? 'status-active' : 'status-suspended'">{{ team.status === 'active' ? t('team.statusActive') : t('team.statusSuspended') }}</span></td>
             <td class="tabular-nums">{{ team.active_member_count }}<span v-if="team.pending_invite_count" class="ml-1 text-xs text-amber-600">+{{ team.pending_invite_count }}</span></td>
             <td class="tabular-nums">{{ formatMoney(team.total_balance) }}</td><td>{{ formatDate(team.created_at) }}</td>
-            <td class="text-right"><button class="btn btn-secondary min-h-10 px-3" @click="openDetails(team)">{{ t('team.details') }}</button></td>
+            <td class="text-right"><div class="flex justify-end gap-2"><button class="btn btn-secondary min-h-10 px-3" data-testid="team-adjust-owner-balance" @click="openOwnerBalance(team)">{{ t('team.adjustOwnerBalance') }}</button><button class="btn btn-secondary min-h-10 px-3" @click="openDetails(team)">{{ t('team.details') }}</button></div></td>
           </tr>
           <tr v-if="!loading && !teams.items.length"><td colspan="7" class="py-12 text-center text-gray-500">{{ t('team.empty') }}</td></tr>
           <tr v-if="loading"><td colspan="7" class="py-12 text-center text-gray-500">...</td></tr>
@@ -52,7 +52,10 @@
           <div><dt class="text-gray-500 dark:text-gray-400">{{ t('team.teamBalance') }}</dt><dd class="mt-1 tabular-nums text-gray-900 dark:text-white">{{ formatMoney(team.total_balance) }}</dd></div>
           <div><dt class="text-gray-500 dark:text-gray-400">{{ t('team.createdAt') }}</dt><dd class="mt-1 text-gray-900 dark:text-white">{{ formatDate(team.created_at) }}</dd></div>
         </dl>
-        <button class="btn btn-secondary mt-4 min-h-11 w-full px-3" @click="openDetails(team)">{{ t('team.details') }}</button>
+        <div class="mt-4 grid grid-cols-2 gap-2">
+          <button class="btn btn-secondary min-h-11 px-3" @click="openOwnerBalance(team)">{{ t('team.adjustOwnerBalance') }}</button>
+          <button class="btn btn-secondary min-h-11 px-3" @click="openDetails(team)">{{ t('team.details') }}</button>
+        </div>
       </article>
       <p v-if="loading" class="py-12 text-center text-sm text-gray-500">...</p>
       <p v-else-if="!teams.items.length" class="py-12 text-center text-sm text-gray-500">{{ t('team.empty') }}</p>
@@ -62,8 +65,12 @@
     <BaseDialog :show="detailOpen" :title="detail?.name || t('team.details')" width="wide" @close="detailOpen = false">
       <template v-if="detail">
         <div class="flex flex-col gap-4 border-b border-gray-200 pb-4 dark:border-dark-700 sm:flex-row sm:items-center sm:justify-between">
-          <div><p class="text-sm font-medium text-gray-900 dark:text-white">{{ detail.owner.email }}</p><p class="mt-1 text-xs text-gray-500">ID {{ detail.id }}</p></div>
+          <div><p class="text-sm font-medium text-gray-900 dark:text-white">{{ detail.owner.email }}</p><p class="mt-1 text-xs text-gray-500">ID {{ detail.id }} · {{ t('team.ownerBalanceCurrent') }} {{ formatMoney(detail.owner.balance) }}</p></div>
           <div class="flex flex-wrap items-center justify-end gap-2">
+            <button type="button" class="btn btn-secondary min-h-10 gap-2" :disabled="submitting" data-testid="team-detail-adjust-owner-balance" @click="openOwnerBalance(detail)">
+              <Icon name="dollar" size="sm" />
+              {{ t('team.adjustOwnerBalance') }}
+            </button>
             <button type="button" class="btn btn-secondary min-h-10 gap-2" :disabled="submitting || detail.status !== 'active'" @click="openAddMember">
               <Icon name="userPlus" size="sm" />
               {{ t('team.addMember') }}
@@ -88,16 +95,16 @@
         </div>
 
         <div v-if="detailTab === 'members'" class="mt-4 hidden overflow-x-auto md:block">
-          <table class="data-table min-w-[880px]"><thead><tr><th>{{ t('team.members') }}</th><th>{{ t('team.status') }}</th><th>{{ t('team.personalBalance') }}</th><th>{{ t('team.teamQuota') }}</th><th>{{ t('team.availableBalance') }}</th><th class="text-right">{{ t('team.actions') }}</th></tr></thead><tbody>
-            <tr v-for="member in detailMembers" :key="member.membership_id"><td><p class="font-medium">{{ memberDisplayName(member) }}</p><p class="text-xs text-gray-500">{{ member.email }}</p></td><td>{{ membershipStatusLabel(member.status) }}</td><td class="tabular-nums">{{ formatMoney(member.balance) }}</td><td class="tabular-nums">{{ formatMoney(member.team_balance) }}</td><td class="tabular-nums">{{ formatMoney(member.total_balance) }}</td><td class="text-right"><div class="flex justify-end gap-1"><button v-if="member.status !== 'invited'" type="button" class="icon-action" :title="t('team.adminAdjustTeamQuota')" :aria-label="t('team.adminAdjustTeamQuota')" @click="openTeamQuota(member)"><Icon name="dollar" size="sm" /></button><button type="button" class="icon-action" :title="t('team.editRemark')" :aria-label="t('team.editRemark')" @click="openAdminRemark(member)"><Icon name="edit" size="sm" /></button><button v-if="member.status === 'active'" type="button" class="icon-action" :title="t('team.adminTransferOwner')" :aria-label="t('team.adminTransferOwner')" @click="confirmTransfer(member)"><Icon name="swap" size="sm" /></button><button type="button" class="icon-action icon-action-danger" :title="member.status === 'invited' ? t('team.cancelInvite') : t('team.remove')" :aria-label="member.status === 'invited' ? t('team.cancelInvite') : t('team.remove')" @click="confirmRemove(member)"><Icon :name="member.status === 'invited' ? 'xCircle' : 'trash'" size="sm" /></button></div></td></tr>
-            <tr v-if="!detailMembers.length"><td colspan="6" class="py-8 text-center text-gray-500">{{ t('team.empty') }}</td></tr>
+          <table class="data-table min-w-[880px]"><thead><tr><th>{{ t('team.members') }}</th><th>{{ t('team.role') }}</th><th>{{ t('team.status') }}</th><th>{{ t('team.personalBalance') }}</th><th>{{ t('team.teamQuota') }}</th><th>{{ t('team.availableBalance') }}</th><th class="text-right">{{ t('team.actions') }}</th></tr></thead><tbody>
+            <tr v-for="member in detailMembers" :key="member.membership_id"><td><p class="font-medium">{{ memberDisplayName(member) }}</p><p class="text-xs text-gray-500">{{ member.email }}</p></td><td><TeamRoleBadge :role="member.is_admin ? 'admin' : 'member'" /></td><td>{{ membershipStatusLabel(member.status) }}</td><td class="tabular-nums">{{ formatMoney(member.balance) }}</td><td class="tabular-nums">{{ formatMoney(member.team_balance) }}</td><td class="tabular-nums">{{ formatMoney(member.total_balance) }}</td><td class="text-right"><div class="flex justify-end gap-1"><button v-if="member.status === 'active'" type="button" class="icon-action" data-testid="admin-member-toggle-admin" :title="member.is_admin ? t('team.unsetAdmin') : t('team.setAdmin')" :aria-label="member.is_admin ? t('team.unsetAdmin') : t('team.setAdmin')" @click="confirmToggleAdmin(member)"><Icon :name="member.is_admin ? 'xCircle' : 'userPlus'" size="sm" /></button><button v-if="member.status !== 'invited'" type="button" class="icon-action" :title="t('team.adminAdjustTeamQuota')" :aria-label="t('team.adminAdjustTeamQuota')" @click="openTeamQuota(member)"><Icon name="dollar" size="sm" /></button><button type="button" class="icon-action" :title="t('team.editRemark')" :aria-label="t('team.editRemark')" @click="openAdminRemark(member)"><Icon name="edit" size="sm" /></button><button v-if="member.status === 'active'" type="button" class="icon-action" :title="t('team.adminTransferOwner')" :aria-label="t('team.adminTransferOwner')" @click="confirmTransfer(member)"><Icon name="swap" size="sm" /></button><button type="button" class="icon-action icon-action-danger" :title="member.status === 'invited' ? t('team.cancelInvite') : t('team.remove')" :aria-label="member.status === 'invited' ? t('team.cancelInvite') : t('team.remove')" @click="confirmRemove(member)"><Icon :name="member.status === 'invited' ? 'xCircle' : 'trash'" size="sm" /></button></div></td></tr>
+            <tr v-if="!detailMembers.length"><td colspan="7" class="py-8 text-center text-gray-500">{{ t('team.empty') }}</td></tr>
           </tbody></table>
         </div>
         <div v-if="detailTab === 'members'" class="mt-4 space-y-3 md:hidden">
           <article v-for="member in detailMembers" :key="member.membership_id" class="rounded-md border border-gray-200 bg-white p-4 dark:border-dark-700 dark:bg-dark-800">
             <div class="flex items-start justify-between gap-3">
               <div class="min-w-0"><p class="break-words font-medium text-gray-900 dark:text-white">{{ memberDisplayName(member) }}</p><p class="mt-1 break-all text-xs text-gray-500 dark:text-gray-400">{{ member.email }}</p></div>
-              <span class="status-badge shrink-0">{{ membershipStatusLabel(member.status) }}</span>
+              <div class="flex shrink-0 flex-col items-end gap-1"><TeamRoleBadge :role="member.is_admin ? 'admin' : 'member'" /><span class="status-badge">{{ membershipStatusLabel(member.status) }}</span></div>
             </div>
             <dl class="mt-4 grid grid-cols-2 gap-3 text-sm">
               <div><dt class="text-gray-500 dark:text-gray-400">{{ t('team.personalBalance') }}</dt><dd class="mt-1 tabular-nums text-gray-900 dark:text-white">{{ formatMoney(member.balance) }}</dd></div>
@@ -105,6 +112,7 @@
               <div class="col-span-2"><dt class="text-gray-500 dark:text-gray-400">{{ t('team.availableBalance') }}</dt><dd class="mt-1 tabular-nums text-gray-900 dark:text-white">{{ formatMoney(member.total_balance) }}</dd></div>
             </dl>
             <div class="mt-4 grid grid-cols-2 gap-2 border-t border-gray-100 pt-3 dark:border-dark-700">
+              <button v-if="member.status === 'active'" type="button" class="btn btn-secondary col-span-2 min-h-11 gap-2" @click="confirmToggleAdmin(member)"><Icon :name="member.is_admin ? 'xCircle' : 'userPlus'" size="sm" />{{ member.is_admin ? t('team.unsetAdmin') : t('team.setAdmin') }}</button>
               <button v-if="member.status !== 'invited'" type="button" class="btn btn-secondary col-span-2 min-h-11 gap-2" @click="openTeamQuota(member)"><Icon name="dollar" size="sm" />{{ t('team.adminAdjustTeamQuota') }}</button>
               <button type="button" class="btn btn-secondary min-h-11 gap-2" @click="openAdminRemark(member)"><Icon name="edit" size="sm" />{{ t('team.editRemark') }}</button>
               <button v-if="member.status === 'active'" type="button" class="btn btn-secondary min-h-11 gap-2" @click="confirmTransfer(member)"><Icon name="swap" size="sm" />{{ t('team.adminTransferOwner') }}</button>
@@ -241,6 +249,8 @@
     </BaseDialog>
 
     <ConfirmDialog :show="removeConfirmOpen" :title="selectedMember?.status === 'invited' ? t('team.cancelInvite') : t('team.remove')" :message="selectedMember?.status === 'invited' ? t('team.confirmAdminCancelInvite') : t('team.confirmAdminRemove')" danger @cancel="removeConfirmOpen = false" @confirm="removeSelectedMember" />
+    <ConfirmDialog :show="adminToggleConfirmOpen" :title="selectedMember?.is_admin ? t('team.unsetAdmin') : t('team.setAdmin')" :message="adminToggleMessage" @cancel="adminToggleConfirmOpen = false" @confirm="toggleSelectedAdmin" />
+    <AdminOwnerBalanceDialog :show="ownerBalanceOpen" :team="ownerBalanceTeam" @close="ownerBalanceOpen = false" @saved="onOwnerBalanceSaved" />
     <ConfirmDialog :show="transferConfirmOpen" :title="t('team.transferOwnerTitle')" :message="t('team.confirmAdminTransferOwner', { member: selectedMember ? memberDisplayName(selectedMember) : '-' })" danger @cancel="transferConfirmOpen = false" @confirm="transferSelectedMember" />
     <ConfirmDialog :show="deleteTeamConfirmOpen" :title="t('team.deleteTeam')" :message="t('team.confirmAdminDelete')" danger @cancel="deleteTeamConfirmOpen = false" @confirm="deleteCurrentTeam" />
     </div>
@@ -259,6 +269,8 @@ import Pagination from '@/components/common/Pagination.vue'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import AdminUserSearchSelect from '@/components/admin/AdminUserSearchSelect.vue'
 import TeamLedgerPanel from '@/components/team/TeamLedgerPanel.vue'
+import TeamRoleBadge from '@/components/team/TeamRoleBadge.vue'
+import AdminOwnerBalanceDialog from '@/components/team/AdminOwnerBalanceDialog.vue'
 import TeamUsageSummaryCards from '@/components/team/TeamUsageSummaryCards.vue'
 
 const { t, locale } = useI18n()
@@ -533,6 +545,32 @@ async function toggleStatus() {
 }
 
 function confirmRemove(member: TeamMember) { selectedMember.value = member; removeConfirmOpen.value = true }
+const adminToggleConfirmOpen = ref(false)
+const ownerBalanceOpen = ref(false)
+const ownerBalanceTeam = ref<TeamSummary | null>(null)
+const adminToggleMessage = computed(() => {
+  if (!selectedMember.value) return ''
+  const member = memberDisplayName(selectedMember.value)
+  return selectedMember.value.is_admin ? t('team.confirmUnsetAdmin', { member }) : t('team.confirmSetAdmin', { member })
+})
+function confirmToggleAdmin(member: TeamMember) { selectedMember.value = member; adminToggleConfirmOpen.value = true }
+async function toggleSelectedAdmin() {
+  adminToggleConfirmOpen.value = false
+  if (!detail.value || !selectedMember.value) return
+  submitting.value = true
+  const enable = !selectedMember.value.is_admin
+  try {
+    await adminTeamsAPI.setMemberAdmin(detail.value.id, selectedMember.value.user_id, enable)
+    await openDetails(detail.value)
+    appStore.showSuccess(enable ? t('team.adminGranted') : t('team.adminRevoked'))
+  } catch (error) { showError(error) } finally { submitting.value = false }
+}
+function openOwnerBalance(team: TeamSummary) { ownerBalanceTeam.value = team; ownerBalanceOpen.value = true }
+async function onOwnerBalanceSaved(teamId: number) {
+  ownerBalanceOpen.value = false
+  const refreshDetail = detailOpen.value && detail.value?.id === teamId ? adminTeamsAPI.get(teamId).then((item) => { detail.value = { ...item, members: item.members ?? [] } }) : Promise.resolve()
+  try { await Promise.all([loadTeams(teams.page), loadOverview(), refreshDetail]) } catch (error) { showError(error) }
+}
 function confirmTransfer(member: TeamMember) { selectedMember.value = member; transferConfirmOpen.value = true }
 async function transferSelectedMember() {
   transferConfirmOpen.value = false

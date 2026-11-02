@@ -216,6 +216,9 @@ export default {
     auditLogs: '操作日志',
     team: '团队中心',
     teams: '团队管理',
+    teamList: '团队列表',
+    teamMembersAdmins: '成员与管理员',
+    teamUsageStats: '花费统计',
   },
 
   // Auth
