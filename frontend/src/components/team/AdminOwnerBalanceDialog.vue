@@ -8,7 +8,7 @@
         <p class="tabular-nums text-gray-900 dark:text-white" data-testid="owner-balance-current">{{ formatMoney(currentBalance) }}</p>
       </div>
       <div>
-        <span class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">{{ t('team.ownerBalanceOperation') }}</span>
+        <span class="input-label">{{ t('team.ownerBalanceOperation') }}</span>
         <div class="inline-flex max-w-full overflow-x-auto rounded-md border border-gray-200 bg-gray-50 p-1 dark:border-dark-600 dark:bg-dark-800" role="radiogroup">
           <button
             v-for="op in operations"
@@ -25,14 +25,14 @@
           </button>
         </div>
       </div>
-      <label class="block">
-        <span class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">{{ t('team.ownerBalanceAmount') }}</span>
-        <input v-model.number="form.amount" data-testid="owner-balance-amount" type="number" step="any" min="0" required class="form-input w-full tabular-nums" />
-      </label>
-      <label class="block">
-        <span class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">{{ t('team.ownerBalanceNotes') }}</span>
-        <textarea v-model.trim="form.notes" maxlength="500" rows="2" class="form-input w-full resize-y" />
-      </label>
+      <div>
+        <label class="input-label" for="owner-balance-amount">{{ t('team.ownerBalanceAmount') }}</label>
+        <input id="owner-balance-amount" v-model.number="form.amount" data-testid="owner-balance-amount" type="number" step="any" min="0" required class="input tabular-nums" />
+      </div>
+      <div>
+        <label class="input-label" for="owner-balance-notes">{{ t('team.ownerBalanceNotes') }}</label>
+        <textarea id="owner-balance-notes" v-model.trim="form.notes" maxlength="500" rows="2" class="input resize-y" />
+      </div>
       <dl v-if="amountValid" class="rounded-md border border-blue-200 bg-blue-50 p-3 text-sm dark:border-blue-800 dark:bg-blue-950">
         <div class="flex items-center justify-between">
           <dt class="text-gray-700 dark:text-gray-300">{{ t('team.ownerBalanceAfter') }}</dt>
@@ -43,8 +43,8 @@
     </form>
     <template #footer>
       <div class="flex justify-end gap-3">
-        <button type="button" class="btn btn-secondary min-h-11" :disabled="submitting" @click="close">{{ t('common.cancel') }}</button>
-        <button type="submit" form="admin-owner-balance-form" class="btn btn-primary min-h-11" :disabled="submitting" data-testid="owner-balance-submit">{{ t('common.confirm') }}</button>
+        <button type="button" class="btn btn-secondary" :disabled="submitting" @click="close">{{ t('common.cancel') }}</button>
+        <button type="submit" form="admin-owner-balance-form" class="btn btn-primary" :disabled="submitting" data-testid="owner-balance-submit">{{ t('common.confirm') }}</button>
       </div>
     </template>
   </BaseDialog>
@@ -122,10 +122,3 @@ async function submit() {
 function roundMoney(value: number) { const rounded = Math.round(value * 1e8) / 1e8; return Object.is(rounded, -0) ? 0 : rounded }
 function formatMoney(value: number) { return new Intl.NumberFormat(locale.value, { style: 'currency', currency: 'USD', maximumFractionDigits: 4 }).format(value || 0) }
 </script>
-
-<style scoped>
-.form-input { @apply min-h-11 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 dark:border-dark-600 dark:bg-dark-800 dark:text-white; }
-.btn { @apply inline-flex items-center justify-center rounded-md px-4 py-2 text-sm font-medium outline-none transition focus:ring-2 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:focus:ring-offset-dark-900; }
-.btn-primary { @apply bg-primary-600 text-white hover:bg-primary-700 focus:ring-primary-500; }
-.btn-secondary { @apply border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 focus:ring-primary-500 dark:border-dark-600 dark:bg-dark-800 dark:text-gray-200 dark:hover:bg-dark-700; }
-</style>

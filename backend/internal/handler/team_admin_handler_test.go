@@ -27,6 +27,7 @@ import (
 
 type teamHTTPFixture struct {
 	svc                  *service.TeamService
+	client               *dbent.Client
 	router               *gin.Engine
 	owner, admin, member *dbent.User
 	teamID               int64
@@ -51,7 +52,7 @@ func newTeamHTTPFixture(t *testing.T) *teamHTTPFixture {
 		require.NoError(t, err)
 		return u
 	}
-	f := &teamHTTPFixture{svc: svc, owner: mk("o@example.com", 100), admin: mk("a@example.com", 0), member: mk("m@example.com", 0)}
+	f := &teamHTTPFixture{svc: svc, client: client, owner: mk("o@example.com", 100), admin: mk("a@example.com", 0), member: mk("m@example.com", 0)}
 	ctx := context.Background()
 	summary, err := svc.Upgrade(ctx, f.owner.ID, "HTTP Team")
 	require.NoError(t, err)
@@ -74,6 +75,7 @@ func newTeamHTTPFixture(t *testing.T) *teamHTTPFixture {
 	team.GET("", h.GetContext)
 	team.PUT("", h.Rename)
 	team.DELETE("", h.Dissolve)
+	team.GET("/usage", h.ListUsage)
 	team.GET("/usage/summary", h.UsageSummary)
 	team.GET("/usage/members", h.MemberSpendStats)
 	team.POST("/transfer-owner", h.TransferOwnership)
@@ -209,4 +211,72 @@ func TestTeamAdminHTTP_LedgerScopeFollowsRole(t *testing.T) {
 	require.Equal(t, http.StatusOK, code)
 	_, ownerTotal = count(f.owner.ID)
 	require.Less(t, adminAfter, ownerTotal)
+}
+
+// 团队用量：主账号 / 管理员看全部（含主账号自己的用量）；普通成员只看自己，且不能通过 member_id 偷看别人。
+func TestTeamAdminHTTP_UsageScopeFollowsRoleAndIncludesOwner(t *testing.T) {
+	f := newTeamHTTPFixture(t)
+	ctx := context.Background()
+	account, err := f.client.Account.Create().SetName("acc").SetPlatform("openai").SetType("apikey").Save(ctx)
+	require.NoError(t, err)
+	addLog := func(u *dbent.User, n int) {
+		key, err := f.client.APIKey.Create().SetUserID(u.ID).SetKey(fmt.Sprintf("sk-usage-%d", u.ID)).SetName("k").Save(ctx)
+		require.NoError(t, err)
+		for i := 0; i < n; i++ {
+			_, err := f.client.UsageLog.Create().SetUserID(u.ID).SetAPIKeyID(key.ID).SetAccountID(account.ID).
+				SetRequestID(fmt.Sprintf("r-%d-%d", u.ID, i)).SetModel("gpt-test").SetInputTokens(1).SetOutputTokens(1).
+				SetTotalCost(1).SetActualCost(1).Save(ctx)
+			require.NoError(t, err)
+		}
+	}
+	addLog(f.owner, 1)
+	addLog(f.admin, 2)
+	addLog(f.member, 3)
+
+	type page struct {
+		Data struct {
+			Items []struct {
+				UserID int64 `json:"user_id"`
+			} `json:"items"`
+			Total int `json:"total"`
+		} `json:"data"`
+	}
+	get := func(userID int64, path string) (int, page) {
+		rec := f.do(userID, http.MethodGet, path, "")
+		var body page
+		_ = json.Unmarshal(rec.Body.Bytes(), &body)
+		return rec.Code, body
+	}
+
+	// 普通成员：只有自己的 3 条；member_id 指向别人时也不会泄露别人的数据。
+	code, body := get(f.member.ID, "/team/usage")
+	require.Equal(t, http.StatusOK, code)
+	require.Equal(t, 3, body.Data.Total)
+	for _, item := range body.Data.Items {
+		require.Equal(t, f.member.ID, item.UserID)
+	}
+	code, body = get(f.member.ID, fmt.Sprintf("/team/usage?member_id=%d", f.owner.ID))
+	require.Equal(t, http.StatusOK, code)
+	require.Equal(t, 3, body.Data.Total)
+	for _, item := range body.Data.Items {
+		require.Equal(t, f.member.ID, item.UserID, "a member must never see another member's rows")
+	}
+
+	// 主账号：全部 6 条（含自己的）；管理员（被任命后）同样；两者都可以按主账号自己的用量筛选。
+	require.Equal(t, http.StatusOK, f.do(f.owner.ID, http.MethodPut, fmt.Sprintf("/team/members/%d/admin", f.admin.ID), `{"is_admin":true}`).Code)
+	for _, uid := range []int64{f.owner.ID, f.admin.ID} {
+		code, body = get(uid, "/team/usage")
+		require.Equal(t, http.StatusOK, code)
+		require.Equal(t, 6, body.Data.Total)
+		code, body = get(uid, fmt.Sprintf("/team/usage?member_id=%d", f.owner.ID))
+		require.Equal(t, http.StatusOK, code)
+		require.Equal(t, 1, body.Data.Total, "the owner's own usage must be filterable")
+		require.Equal(t, f.owner.ID, body.Data.Items[0].UserID)
+	}
+
+	// 没有加入任何团队的用户拿不到团队用量。
+	outsider, err := f.client.User.Create().SetEmail("out@example.com").SetPasswordHash("h").SetRole(service.RoleUser).SetStatus(service.StatusActive).Save(ctx)
+	require.NoError(t, err)
+	code, _ = get(outsider.ID, "/team/usage")
+	require.NotEqual(t, http.StatusOK, code)
 }

@@ -5,7 +5,7 @@
       <div class="flex flex-wrap items-center gap-2">
         <span class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ t('team.spendRange') }}:</span>
         <DateRangePicker v-model:start-date="startDate" v-model:end-date="endDate" @change="refresh" />
-        <button type="button" class="btn btn-secondary min-h-10 px-3" :disabled="loading" data-testid="team-spend-refresh" @click="refresh">
+        <button type="button" class="btn btn-secondary" :disabled="loading" data-testid="team-spend-refresh" @click="refresh">
           {{ t('team.spendLoad') }}
         </button>
       </div>
@@ -145,8 +145,6 @@ defineExpose({ refresh })
 </script>
 
 <style scoped>
-.btn { @apply inline-flex items-center justify-center rounded-md px-4 py-2 text-sm font-medium outline-none transition focus:ring-2 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:focus:ring-offset-dark-900; }
-.btn-secondary { @apply border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 focus:ring-primary-500 dark:border-dark-600 dark:bg-dark-800 dark:text-gray-200 dark:hover:bg-dark-700; }
 .metric { @apply rounded-md border border-gray-200 bg-white p-4 dark:border-dark-700 dark:bg-dark-800; }
 .metric p { @apply text-sm font-medium text-gray-500 dark:text-gray-400; }
 .metric strong { @apply mt-2 block text-2xl font-semibold tabular-nums text-gray-900 dark:text-white; }

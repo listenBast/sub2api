@@ -183,6 +183,15 @@
     color-scheme: dark;
   }
 
+  /* Chrome 的原生日期/时间输入框内部行高比文本框高约 2px，会让同一行的控件错位；统一成与 .input / Select 相同的 42px。 */
+  .input[type='date'],
+  .input[type='time'],
+  .input[type='datetime-local'],
+  .input[type='month'],
+  .input[type='week'] {
+    @apply h-[42px];
+  }
+
   .input-error {
     @apply border-red-500 focus:border-red-500 focus:ring-red-500/30;
   }

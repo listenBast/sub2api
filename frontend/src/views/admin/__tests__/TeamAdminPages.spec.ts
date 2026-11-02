@@ -63,6 +63,8 @@ describe('admin TeamMembersView', () => {
     expect(mocks.get).toHaveBeenCalledWith(5)
     expect(wrapper.get('[data-testid="team-members-title"]').text()).toBe('Alpha')
     expect(wrapper.find('[data-testid="team-member-owner-row"]').text()).toContain('team.roleOwner')
+    // 主账号行不提供移除 / 设为管理员 / 转让等任何操作
+    expect(wrapper.find('[data-testid="team-member-owner-row"] button').exists()).toBe(false)
     const rows = wrapper.findAll('[data-testid="team-member-row"]')
     expect(rows).toHaveLength(2)
     expect(rows[0].text()).toContain('team.roleMember')

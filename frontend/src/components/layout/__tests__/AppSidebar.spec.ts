@@ -103,3 +103,32 @@ describe('AppSidebar team management menu', () => {
     expect(componentSource).toContain('useTeamRoleSync(')
   })
 })
+
+describe('AppSidebar user team center menu', () => {
+  const start = componentSource.indexOf('const teamNavItem = computed')
+  const block = componentSource.slice(start, componentSource.indexOf('// buildSelfNavItems', start))
+
+  it('is an expandable parent whose children depend on the live team role', () => {
+    expect(start).toBeGreaterThan(-1)
+    expect(block).toContain('expandOnly: true')
+    expect(block).toContain('teamStore.isManager')
+    expect(block).toContain('teamStore.isMember')
+    expect(componentSource).toContain('teamNavItem.value')
+  })
+
+  it('gives owners and admins all five sub-pages, plain members no spend statistics or member management', () => {
+    const managerBranch = block.slice(block.indexOf('teamStore.isManager'), block.indexOf('teamStore.isMember'))
+    const memberBranch = block.slice(block.indexOf('teamStore.isMember'))
+    for (const key of ['overview', 'members', 'usage', 'spend', 'ledger']) expect(managerBranch).toContain(key)
+    expect(memberBranch).toContain('overview')
+    expect(memberBranch).toContain('usage')
+    expect(memberBranch).toContain('ledger')
+    expect(memberBranch).not.toContain('members')
+    expect(memberBranch).not.toContain('spend')
+  })
+
+  it('keeps the flat single entry for users without a team and links every child to /team/*', () => {
+    expect(block).toMatch(/return base\s*\n/)
+    for (const path of ['overview', 'members', 'usage', 'spend', 'ledger']) expect(block).toContain(`'/team/${path}'`)
+  })
+})

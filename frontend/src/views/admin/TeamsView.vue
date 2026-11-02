@@ -1,11 +1,11 @@
 <template>
   <AppLayout>
     <div class="space-y-6">
-    <form class="flex flex-col gap-3 border-b border-gray-200 pb-5 dark:border-dark-700 sm:flex-row" @submit.prevent="loadTeams(1)">
-      <label class="flex-1"><span class="sr-only">{{ t('team.search') }}</span><input v-model.trim="filters.search" class="form-input w-full" :placeholder="t('team.search')" /></label>
-      <label class="sm:w-48"><span class="sr-only">{{ t('team.status') }}</span><select v-model="filters.status" class="form-input w-full"><option value="">{{ t('team.allStatuses') }}</option><option value="active">{{ t('team.statusActive') }}</option><option value="suspended">{{ t('team.statusSuspended') }}</option></select></label>
-      <button class="btn btn-primary min-h-11">{{ t('common.search') }}</button>
-      <button type="button" class="btn btn-secondary min-h-11 gap-2" @click="openCreateTeam">
+    <form class="flex flex-col gap-3 border-b border-gray-200 pb-5 dark:border-dark-700 sm:flex-row sm:items-center" data-testid="admin-team-filters" @submit.prevent="loadTeams(1)">
+      <div class="flex-1"><label class="sr-only" for="admin-team-search">{{ t('team.search') }}</label><input id="admin-team-search" v-model.trim="filters.search" class="input" :placeholder="t('team.search')" /></div>
+      <div class="sm:w-48"><Select v-model="filters.status" :options="statusFilterOptions" :aria-label="t('team.status')" /></div>
+      <button class="btn btn-primary">{{ t('common.search') }}</button>
+      <button type="button" class="btn btn-secondary gap-2" @click="openCreateTeam">
         <Icon name="plus" size="sm" />
         {{ t('team.createTeam') }}
       </button>
@@ -33,7 +33,7 @@
             <td><span class="status-badge" :class="team.status === 'active' ? 'status-active' : 'status-suspended'">{{ team.status === 'active' ? t('team.statusActive') : t('team.statusSuspended') }}</span></td>
             <td class="tabular-nums">{{ team.active_member_count }}<span v-if="team.pending_invite_count" class="ml-1 text-xs text-amber-600">+{{ team.pending_invite_count }}</span></td>
             <td class="tabular-nums">{{ formatMoney(team.total_balance) }}</td><td>{{ formatDate(team.created_at) }}</td>
-            <td class="text-right"><div class="flex justify-end gap-2"><button class="btn btn-secondary min-h-10 px-3" data-testid="team-adjust-owner-balance" @click="openOwnerBalance(team)">{{ t('team.adjustOwnerBalance') }}</button><button class="btn btn-secondary min-h-10 px-3" @click="openDetails(team)">{{ t('team.details') }}</button></div></td>
+            <td class="text-right"><div class="flex justify-end gap-2"><button class="btn btn-secondary" data-testid="team-adjust-owner-balance" @click="openOwnerBalance(team)">{{ t('team.adjustOwnerBalance') }}</button><button class="btn btn-secondary" @click="openDetails(team)">{{ t('team.details') }}</button></div></td>
           </tr>
           <tr v-if="!loading && !teams.items.length"><td colspan="7" class="py-12 text-center text-gray-500">{{ t('team.empty') }}</td></tr>
           <tr v-if="loading"><td colspan="7" class="py-12 text-center text-gray-500">...</td></tr>
@@ -53,8 +53,8 @@
           <div><dt class="text-gray-500 dark:text-gray-400">{{ t('team.createdAt') }}</dt><dd class="mt-1 text-gray-900 dark:text-white">{{ formatDate(team.created_at) }}</dd></div>
         </dl>
         <div class="mt-4 grid grid-cols-2 gap-2">
-          <button class="btn btn-secondary min-h-11 px-3" @click="openOwnerBalance(team)">{{ t('team.adjustOwnerBalance') }}</button>
-          <button class="btn btn-secondary min-h-11 px-3" @click="openDetails(team)">{{ t('team.details') }}</button>
+          <button class="btn btn-secondary" @click="openOwnerBalance(team)">{{ t('team.adjustOwnerBalance') }}</button>
+          <button class="btn btn-secondary" @click="openDetails(team)">{{ t('team.details') }}</button>
         </div>
       </article>
       <p v-if="loading" class="py-12 text-center text-sm text-gray-500">...</p>
@@ -67,19 +67,19 @@
         <div class="flex flex-col gap-4 border-b border-gray-200 pb-4 dark:border-dark-700 sm:flex-row sm:items-center sm:justify-between">
           <div><p class="text-sm font-medium text-gray-900 dark:text-white">{{ detail.owner.email }}</p><p class="mt-1 text-xs text-gray-500">ID {{ detail.id }} · {{ t('team.ownerBalanceCurrent') }} {{ formatMoney(detail.owner.balance) }}</p></div>
           <div class="flex flex-wrap items-center justify-end gap-2">
-            <button type="button" class="btn btn-secondary min-h-10 gap-2" :disabled="submitting" data-testid="team-detail-adjust-owner-balance" @click="openOwnerBalance(detail)">
+            <button type="button" class="btn btn-secondary gap-2" :disabled="submitting" data-testid="team-detail-adjust-owner-balance" @click="openOwnerBalance(detail)">
               <Icon name="dollar" size="sm" />
               {{ t('team.adjustOwnerBalance') }}
             </button>
-            <button type="button" class="btn btn-secondary min-h-10 gap-2" :disabled="submitting || detail.status !== 'active'" @click="openAddMember">
+            <button type="button" class="btn btn-secondary gap-2" :disabled="submitting || detail.status !== 'active'" @click="openAddMember">
               <Icon name="userPlus" size="sm" />
               {{ t('team.addMember') }}
             </button>
-            <button type="button" class="btn btn-danger min-h-10 gap-2" :disabled="submitting" @click="deleteTeamConfirmOpen = true">
+            <button type="button" class="btn btn-danger gap-2" :disabled="submitting" @click="deleteTeamConfirmOpen = true">
               <Icon name="trash" size="sm" />
               {{ t('team.deleteTeam') }}
             </button>
-            <button type="button" class="btn min-h-10" :class="detail.status === 'active' ? 'btn-danger' : 'btn-primary'" :disabled="submitting" @click="openStatusConfirmation">
+            <button type="button" class="btn" :class="detail.status === 'active' ? 'btn-danger' : 'btn-primary'" :disabled="submitting" @click="openStatusConfirmation">
               {{ detail.status === 'active' ? t('team.suspend') : t('team.resume') }}
             </button>
           </div>
@@ -96,38 +96,36 @@
 
         <div v-if="detailTab === 'members'" class="mt-4 hidden overflow-x-auto md:block">
           <table class="data-table min-w-[880px]"><thead><tr><th>{{ t('team.members') }}</th><th>{{ t('team.role') }}</th><th>{{ t('team.status') }}</th><th>{{ t('team.personalBalance') }}</th><th>{{ t('team.teamQuota') }}</th><th>{{ t('team.availableBalance') }}</th><th class="text-right">{{ t('team.actions') }}</th></tr></thead><tbody>
-            <tr v-for="member in detailMembers" :key="member.membership_id"><td><p class="font-medium">{{ memberDisplayName(member) }}</p><p class="text-xs text-gray-500">{{ member.email }}</p></td><td><TeamRoleBadge :role="member.is_admin ? 'admin' : 'member'" /></td><td>{{ membershipStatusLabel(member.status) }}</td><td class="tabular-nums">{{ formatMoney(member.balance) }}</td><td class="tabular-nums">{{ formatMoney(member.team_balance) }}</td><td class="tabular-nums">{{ formatMoney(member.total_balance) }}</td><td class="text-right"><div class="flex justify-end gap-1"><button v-if="member.status === 'active'" type="button" class="icon-action" data-testid="admin-member-toggle-admin" :title="member.is_admin ? t('team.unsetAdmin') : t('team.setAdmin')" :aria-label="member.is_admin ? t('team.unsetAdmin') : t('team.setAdmin')" @click="confirmToggleAdmin(member)"><Icon :name="member.is_admin ? 'xCircle' : 'userPlus'" size="sm" /></button><button v-if="member.status !== 'invited'" type="button" class="icon-action" :title="t('team.adminAdjustTeamQuota')" :aria-label="t('team.adminAdjustTeamQuota')" @click="openTeamQuota(member)"><Icon name="dollar" size="sm" /></button><button type="button" class="icon-action" :title="t('team.editRemark')" :aria-label="t('team.editRemark')" @click="openAdminRemark(member)"><Icon name="edit" size="sm" /></button><button v-if="member.status === 'active'" type="button" class="icon-action" :title="t('team.adminTransferOwner')" :aria-label="t('team.adminTransferOwner')" @click="confirmTransfer(member)"><Icon name="swap" size="sm" /></button><button type="button" class="icon-action icon-action-danger" :title="member.status === 'invited' ? t('team.cancelInvite') : t('team.remove')" :aria-label="member.status === 'invited' ? t('team.cancelInvite') : t('team.remove')" @click="confirmRemove(member)"><Icon :name="member.status === 'invited' ? 'xCircle' : 'trash'" size="sm" /></button></div></td></tr>
-            <tr v-if="!detailMembers.length"><td colspan="7" class="py-8 text-center text-gray-500">{{ t('team.empty') }}</td></tr>
-          </tbody></table>
+            <tr v-for="member in detailMemberRows" :key="member.is_owner ? `owner-${member.user_id}` : member.membership_id" :data-testid="member.is_owner ? 'admin-team-owner-row' : 'admin-team-member-row'"><td><p class="font-medium">{{ memberDisplayName(member) }}</p><p class="text-xs text-gray-500">{{ member.email }}</p></td><td><TeamRoleBadge :role="teamMemberRole(member)" /></td><td>{{ membershipStatusLabel(member.status) }}</td><td class="tabular-nums">{{ formatMoney(member.balance) }}</td><td class="tabular-nums">{{ member.is_owner ? '-' : formatMoney(member.team_balance) }}</td><td class="tabular-nums">{{ formatMoney(member.total_balance) }}</td><td class="text-right"><div v-if="!member.is_owner" class="flex justify-end gap-1"><button v-if="member.status === 'active'" type="button" class="icon-action" data-testid="admin-member-toggle-admin" :title="member.is_admin ? t('team.unsetAdmin') : t('team.setAdmin')" :aria-label="member.is_admin ? t('team.unsetAdmin') : t('team.setAdmin')" @click="confirmToggleAdmin(member)"><Icon :name="member.is_admin ? 'xCircle' : 'userPlus'" size="sm" /></button><button v-if="member.status !== 'invited'" type="button" class="icon-action" :title="t('team.adminAdjustTeamQuota')" :aria-label="t('team.adminAdjustTeamQuota')" @click="openTeamQuota(member)"><Icon name="dollar" size="sm" /></button><button type="button" class="icon-action" :title="t('team.editRemark')" :aria-label="t('team.editRemark')" @click="openAdminRemark(member)"><Icon name="edit" size="sm" /></button><button v-if="member.status === 'active'" type="button" class="icon-action" :title="t('team.adminTransferOwner')" :aria-label="t('team.adminTransferOwner')" @click="confirmTransfer(member)"><Icon name="swap" size="sm" /></button><button type="button" class="icon-action icon-action-danger" :title="member.status === 'invited' ? t('team.cancelInvite') : t('team.remove')" :aria-label="member.status === 'invited' ? t('team.cancelInvite') : t('team.remove')" @click="confirmRemove(member)"><Icon :name="member.status === 'invited' ? 'xCircle' : 'trash'" size="sm" /></button></div></td></tr>
+                      </tbody></table>
         </div>
         <div v-if="detailTab === 'members'" class="mt-4 space-y-3 md:hidden">
-          <article v-for="member in detailMembers" :key="member.membership_id" class="rounded-md border border-gray-200 bg-white p-4 dark:border-dark-700 dark:bg-dark-800">
+          <article v-for="member in detailMemberRows" :key="member.is_owner ? `owner-${member.user_id}` : member.membership_id" class="rounded-md border border-gray-200 bg-white p-4 dark:border-dark-700 dark:bg-dark-800">
             <div class="flex items-start justify-between gap-3">
               <div class="min-w-0"><p class="break-words font-medium text-gray-900 dark:text-white">{{ memberDisplayName(member) }}</p><p class="mt-1 break-all text-xs text-gray-500 dark:text-gray-400">{{ member.email }}</p></div>
-              <div class="flex shrink-0 flex-col items-end gap-1"><TeamRoleBadge :role="member.is_admin ? 'admin' : 'member'" /><span class="status-badge">{{ membershipStatusLabel(member.status) }}</span></div>
+              <div class="flex shrink-0 flex-col items-end gap-1"><TeamRoleBadge :role="teamMemberRole(member)" /><span class="status-badge">{{ membershipStatusLabel(member.status) }}</span></div>
             </div>
             <dl class="mt-4 grid grid-cols-2 gap-3 text-sm">
               <div><dt class="text-gray-500 dark:text-gray-400">{{ t('team.personalBalance') }}</dt><dd class="mt-1 tabular-nums text-gray-900 dark:text-white">{{ formatMoney(member.balance) }}</dd></div>
-              <div><dt class="text-gray-500 dark:text-gray-400">{{ t('team.teamQuota') }}</dt><dd class="mt-1 tabular-nums text-gray-900 dark:text-white">{{ formatMoney(member.team_balance) }}</dd></div>
+              <div><dt class="text-gray-500 dark:text-gray-400">{{ t('team.teamQuota') }}</dt><dd class="mt-1 tabular-nums text-gray-900 dark:text-white">{{ member.is_owner ? '-' : formatMoney(member.team_balance) }}</dd></div>
               <div class="col-span-2"><dt class="text-gray-500 dark:text-gray-400">{{ t('team.availableBalance') }}</dt><dd class="mt-1 tabular-nums text-gray-900 dark:text-white">{{ formatMoney(member.total_balance) }}</dd></div>
             </dl>
-            <div class="mt-4 grid grid-cols-2 gap-2 border-t border-gray-100 pt-3 dark:border-dark-700">
-              <button v-if="member.status === 'active'" type="button" class="btn btn-secondary col-span-2 min-h-11 gap-2" @click="confirmToggleAdmin(member)"><Icon :name="member.is_admin ? 'xCircle' : 'userPlus'" size="sm" />{{ member.is_admin ? t('team.unsetAdmin') : t('team.setAdmin') }}</button>
-              <button v-if="member.status !== 'invited'" type="button" class="btn btn-secondary col-span-2 min-h-11 gap-2" @click="openTeamQuota(member)"><Icon name="dollar" size="sm" />{{ t('team.adminAdjustTeamQuota') }}</button>
-              <button type="button" class="btn btn-secondary min-h-11 gap-2" @click="openAdminRemark(member)"><Icon name="edit" size="sm" />{{ t('team.editRemark') }}</button>
-              <button v-if="member.status === 'active'" type="button" class="btn btn-secondary min-h-11 gap-2" @click="confirmTransfer(member)"><Icon name="swap" size="sm" />{{ t('team.adminTransferOwner') }}</button>
-              <button type="button" class="btn btn-danger min-h-11 gap-2" :class="member.status === 'invited' ? 'col-span-1' : 'col-span-2'" @click="confirmRemove(member)"><Icon :name="member.status === 'invited' ? 'xCircle' : 'trash'" size="sm" />{{ member.status === 'invited' ? t('team.cancelInvite') : t('team.remove') }}</button>
+            <div v-if="!member.is_owner" class="mt-4 grid grid-cols-2 gap-2 border-t border-gray-100 pt-3 dark:border-dark-700">
+              <button v-if="member.status === 'active'" type="button" class="btn btn-secondary col-span-2 gap-2" @click="confirmToggleAdmin(member)"><Icon :name="member.is_admin ? 'xCircle' : 'userPlus'" size="sm" />{{ member.is_admin ? t('team.unsetAdmin') : t('team.setAdmin') }}</button>
+              <button v-if="member.status !== 'invited'" type="button" class="btn btn-secondary col-span-2 gap-2" @click="openTeamQuota(member)"><Icon name="dollar" size="sm" />{{ t('team.adminAdjustTeamQuota') }}</button>
+              <button type="button" class="btn btn-secondary gap-2" @click="openAdminRemark(member)"><Icon name="edit" size="sm" />{{ t('team.editRemark') }}</button>
+              <button v-if="member.status === 'active'" type="button" class="btn btn-secondary gap-2" @click="confirmTransfer(member)"><Icon name="swap" size="sm" />{{ t('team.adminTransferOwner') }}</button>
+              <button type="button" class="btn btn-danger gap-2" :class="member.status === 'invited' ? 'col-span-1' : 'col-span-2'" @click="confirmRemove(member)"><Icon :name="member.status === 'invited' ? 'xCircle' : 'trash'" size="sm" />{{ member.status === 'invited' ? t('team.cancelInvite') : t('team.remove') }}</button>
             </div>
           </article>
-          <p v-if="!detailMembers.length" class="py-8 text-center text-sm text-gray-500">{{ t('team.empty') }}</p>
         </div>
 
-        <form v-if="detailTab === 'usage'" class="mt-4 grid gap-3 border-y border-gray-200 py-4 dark:border-dark-700 sm:grid-cols-2 lg:grid-cols-5" @submit.prevent="loadAdminUsage(1)">
-          <label><span class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">{{ t('team.members') }}</span><select v-model.number="usageFilters.member_id" class="form-input w-full"><option :value="0">{{ t('team.filterMember') }}</option><option v-for="member in usageMemberOptions" :key="member.user_id" :value="member.user_id">{{ memberDisplayName(member) }}</option></select></label>
-          <label><span class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">{{ t('team.filterModel') }}</span><input v-model.trim="usageFilters.model" class="form-input w-full" /></label>
-          <label><span class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">{{ t('team.startDate') }}</span><input v-model="usageFilters.start_date" type="date" class="form-input w-full" /></label>
-          <label><span class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">{{ t('team.endDate') }}</span><input v-model="usageFilters.end_date" type="date" class="form-input w-full" /></label>
-          <button class="btn btn-primary min-h-11 self-end" :disabled="usageLoading">{{ t('common.search') }}</button>
+        <form v-if="detailTab === 'usage'" data-testid="admin-team-usage-filters" class="mt-4 grid items-end gap-3 border-y border-gray-200 py-4 dark:border-dark-700 sm:grid-cols-2 lg:grid-cols-5" @submit.prevent="loadAdminUsage(1)">
+          <div><label class="input-label" for="admin-team-usage-member">{{ t('team.members') }}</label><Select id="admin-team-usage-member" v-model="usageFilters.member_id" :options="usageMemberSelectOptions" /></div>
+          <label><span class="input-label">{{ t('team.filterModel') }}</span><input v-model.trim="usageFilters.model" class="input" /></label>
+          <label><span class="input-label">{{ t('team.startDate') }}</span><input v-model="usageFilters.start_date" type="date" class="input" /></label>
+          <label><span class="input-label">{{ t('team.endDate') }}</span><input v-model="usageFilters.end_date" type="date" class="input" /></label>
+          <button class="btn btn-primary" :disabled="usageLoading">{{ t('common.search') }}</button>
         </form>
         <TeamUsageSummaryCards v-if="detailTab === 'usage' && usageFilters.member_id" class="mt-4" :summary="usageSummary" />
 
@@ -162,35 +160,35 @@
 
     <BaseDialog :show="createTeamOpen" :title="t('team.createTeam')" width="narrow" @close="createTeamOpen = false">
       <form id="admin-team-create-form" class="space-y-4" @submit.prevent="createTeam">
-        <label class="block"><span class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">{{ t('team.teamName') }}</span><input v-model.trim="createTeamForm.name" required maxlength="100" class="form-input w-full" /></label>
-        <label class="block">
-          <span class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">{{ t('team.ownerEmail') }}</span>
+        <label class="block"><span class="input-label">{{ t('team.teamName') }}</span><input v-model.trim="createTeamForm.name" required maxlength="100" class="input" /></label>
+        <div>
+          <span class="input-label">{{ t('team.ownerEmail') }}</span>
           <AdminUserSearchSelect :key="createUserSearchKey" v-model="createTeamForm.owner_email" :placeholder="t('team.searchUserPlaceholder')" />
           <span class="mt-1.5 block text-xs text-gray-500 dark:text-gray-400">{{ t('team.userSearchHint') }}</span>
-        </label>
+        </div>
       </form>
-      <template #footer><div class="flex justify-end gap-3"><button type="button" class="btn btn-secondary min-h-11" :disabled="submitting" @click="createTeamOpen = false">{{ t('common.cancel') }}</button><button type="submit" form="admin-team-create-form" class="btn btn-primary min-h-11" :disabled="submitting || !createTeamForm.owner_email">{{ t('team.createTeam') }}</button></div></template>
+      <template #footer><div class="flex justify-end gap-3"><button type="button" class="btn btn-secondary" :disabled="submitting" @click="createTeamOpen = false">{{ t('common.cancel') }}</button><button type="submit" form="admin-team-create-form" class="btn btn-primary" :disabled="submitting || !createTeamForm.owner_email">{{ t('team.createTeam') }}</button></div></template>
     </BaseDialog>
 
     <BaseDialog :show="addMemberOpen" :title="t('team.addMember')" width="narrow" @close="addMemberOpen = false">
       <form id="admin-team-add-member-form" class="space-y-4" @submit.prevent="addMember">
         <div class="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">{{ t('team.directAddNotice') }}</div>
-        <label class="block">
-          <span class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">{{ t('team.inviteEmail') }}</span>
+        <div>
+          <span class="input-label">{{ t('team.inviteEmail') }}</span>
           <AdminUserSearchSelect :key="addUserSearchKey" v-model="addMemberForm.email" :exclude-user-ids="memberSearchExcludedIds" :placeholder="t('team.searchUserPlaceholder')" />
           <span class="mt-1.5 block text-xs text-gray-500 dark:text-gray-400">{{ t('team.userSearchHint') }}</span>
-        </label>
-        <label class="block"><span class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">{{ t('team.memberRemark') }}</span><input v-model.trim="addMemberForm.remark" maxlength="100" class="form-input w-full" :placeholder="t('team.remarkPlaceholder')" /></label>
+        </div>
+        <label class="block"><span class="input-label">{{ t('team.memberRemark') }}</span><input v-model.trim="addMemberForm.remark" maxlength="100" class="input" :placeholder="t('team.remarkPlaceholder')" /></label>
       </form>
-      <template #footer><div class="flex justify-end gap-3"><button type="button" class="btn btn-secondary min-h-11" :disabled="submitting" @click="addMemberOpen = false">{{ t('common.cancel') }}</button><button type="submit" form="admin-team-add-member-form" class="btn btn-primary min-h-11" :disabled="submitting || !addMemberForm.email">{{ t('team.addMember') }}</button></div></template>
+      <template #footer><div class="flex justify-end gap-3"><button type="button" class="btn btn-secondary" :disabled="submitting" @click="addMemberOpen = false">{{ t('common.cancel') }}</button><button type="submit" form="admin-team-add-member-form" class="btn btn-primary" :disabled="submitting || !addMemberForm.email">{{ t('team.addMember') }}</button></div></template>
     </BaseDialog>
 
     <BaseDialog :show="remarkOpen" :title="t('team.editRemark')" width="narrow" @close="remarkOpen = false">
       <form id="admin-team-remark-form" class="space-y-4" @submit.prevent="saveAdminRemark">
         <div class="rounded-md border border-gray-200 bg-gray-50 p-3 text-sm dark:border-dark-700 dark:bg-dark-800"><p class="font-medium text-gray-900 dark:text-white">{{ remarkMember?.username || remarkMember?.email }}</p><p class="mt-1 break-all text-gray-500 dark:text-gray-400">{{ remarkMember?.email }}</p></div>
-        <label class="block"><span class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">{{ t('team.memberRemark') }}</span><input v-model.trim="memberRemark" maxlength="100" class="form-input w-full" :placeholder="t('team.remarkPlaceholder')" /></label>
+        <label class="block"><span class="input-label">{{ t('team.memberRemark') }}</span><input v-model.trim="memberRemark" maxlength="100" class="input" :placeholder="t('team.remarkPlaceholder')" /></label>
       </form>
-      <template #footer><div class="flex justify-end gap-3"><button type="button" class="btn btn-secondary min-h-11" :disabled="submitting" @click="remarkOpen = false">{{ t('common.cancel') }}</button><button type="submit" form="admin-team-remark-form" class="btn btn-primary min-h-11" :disabled="submitting">{{ t('common.save') }}</button></div></template>
+      <template #footer><div class="flex justify-end gap-3"><button type="button" class="btn btn-secondary" :disabled="submitting" @click="remarkOpen = false">{{ t('common.cancel') }}</button><button type="submit" form="admin-team-remark-form" class="btn btn-primary" :disabled="submitting">{{ t('common.save') }}</button></div></template>
     </BaseDialog>
 
     <BaseDialog :show="teamQuotaOpen" :title="t('team.adminAdjustTeamQuota')" width="narrow" @close="closeTeamQuota">
@@ -204,27 +202,27 @@
           </dl>
         </div>
         <div>
-          <span class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">{{ t('team.adminTeamQuotaOperation') }}</span>
+          <span class="input-label">{{ t('team.adminTeamQuotaOperation') }}</span>
           <div class="inline-flex max-w-full overflow-x-auto rounded-md border border-gray-200 bg-gray-50 p-1 dark:border-dark-600 dark:bg-dark-800" role="radiogroup">
             <button v-for="op in teamQuotaOperations" :key="op.value" type="button" role="radio" :aria-checked="teamQuotaForm.operation === op.value" class="min-h-10 whitespace-nowrap rounded px-4 text-sm font-medium" :class="teamQuotaForm.operation === op.value ? 'bg-white text-primary-700 shadow-sm dark:bg-dark-700 dark:text-primary-300' : 'text-gray-600 dark:text-gray-400'" @click="teamQuotaForm.operation = op.value">{{ op.label }}</button>
           </div>
         </div>
         <label class="block">
-          <span class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">{{ teamQuotaForm.operation === 'set' ? t('team.adminTeamQuotaTarget') : t('team.amount') }}</span>
-          <input v-model.number="teamQuotaForm.amount" type="number" step="any" min="0" required class="form-input w-full" />
+          <span class="input-label">{{ teamQuotaForm.operation === 'set' ? t('team.adminTeamQuotaTarget') : t('team.amount') }}</span>
+          <input v-model.number="teamQuotaForm.amount" type="number" step="any" min="0" required class="input" />
         </label>
-        <label class="block">
-          <span class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">{{ t('team.adminTeamQuotaSource') }}</span>
-          <select v-model="teamQuotaForm.source" class="form-input w-full"><option v-for="src in teamQuotaSources" :key="src.value" :value="src.value">{{ src.label }}</option></select>
+        <div>
+          <span class="input-label">{{ t('team.adminTeamQuotaSource') }}</span>
+          <Select v-model="teamQuotaForm.source" :options="teamQuotaSources" />
           <span class="mt-1.5 block text-xs text-gray-500 dark:text-gray-400">{{ teamQuotaSourceHint }}</span>
-        </label>
-        <label class="block"><span class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">{{ t('team.note') }}</span><textarea v-model.trim="teamQuotaForm.notes" maxlength="500" rows="2" class="form-input w-full resize-y" /></label>
+        </div>
+        <label class="block"><span class="input-label">{{ t('team.note') }}</span><textarea v-model.trim="teamQuotaForm.notes" maxlength="500" rows="2" class="input resize-y" /></label>
         <dl v-if="teamQuotaAmountValid" class="space-y-1 rounded-md border border-blue-200 bg-blue-50 p-3 text-sm dark:border-blue-800 dark:bg-blue-950">
           <div class="flex items-center justify-between"><dt class="text-gray-700 dark:text-gray-300">{{ t('team.adminTeamQuotaNew') }}</dt><dd class="font-semibold tabular-nums" :class="teamQuotaPreview.memberAfter < 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-gray-100'">{{ formatMoney(teamQuotaPreview.memberAfter) }}</dd></div>
           <div v-if="teamQuotaForm.source === 'owner_pool' && detail" class="flex items-center justify-between"><dt class="text-gray-700 dark:text-gray-300">{{ t('team.adminTeamQuotaOwnerAfter') }}</dt><dd class="font-semibold tabular-nums" :class="teamQuotaPreview.ownerAfter < 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-gray-100'">{{ formatMoney(teamQuotaPreview.ownerAfter) }}</dd></div>
         </dl>
       </form>
-      <template #footer><div class="flex justify-end gap-3"><button type="button" class="btn btn-secondary min-h-11" :disabled="submitting" @click="closeTeamQuota">{{ t('common.cancel') }}</button><button type="submit" form="admin-team-quota-form" class="btn btn-primary min-h-11" :disabled="submitting || !teamQuotaAmountValid">{{ t('team.confirmAdjustment') }}</button></div></template>
+      <template #footer><div class="flex justify-end gap-3"><button type="button" class="btn btn-secondary" :disabled="submitting" @click="closeTeamQuota">{{ t('common.cancel') }}</button><button type="submit" form="admin-team-quota-form" class="btn btn-primary" :disabled="submitting || !teamQuotaAmountValid">{{ t('team.confirmAdjustment') }}</button></div></template>
     </BaseDialog>
 
     <BaseDialog :show="statusConfirmOpen" :title="statusTarget === 'suspended' ? t('team.suspend') : t('team.resume')" width="narrow" @close="closeStatusConfirmation">
@@ -234,14 +232,14 @@
           <p class="mt-1 break-all text-gray-500 dark:text-gray-400">{{ detail?.owner.email }}</p>
         </div>
         <label class="block">
-          <span class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">{{ t('team.statusReason') }}</span>
-          <textarea v-model.trim="statusReason" required maxlength="450" rows="4" class="form-input w-full resize-y" />
+          <span class="input-label">{{ t('team.statusReason') }}</span>
+          <textarea v-model.trim="statusReason" required maxlength="450" rows="4" class="input resize-y" />
         </label>
       </form>
       <template #footer>
         <div class="flex justify-end gap-3">
-          <button class="btn btn-secondary min-h-11" :disabled="submitting" @click="closeStatusConfirmation">{{ t('common.cancel') }}</button>
-          <button type="submit" form="team-status-form" class="btn min-h-11" :class="statusTarget === 'suspended' ? 'btn-danger' : 'btn-primary'" :disabled="submitting">
+          <button class="btn btn-secondary" :disabled="submitting" @click="closeStatusConfirmation">{{ t('common.cancel') }}</button>
+          <button type="submit" form="team-status-form" class="btn" :class="statusTarget === 'suspended' ? 'btn-danger' : 'btn-primary'" :disabled="submitting">
             {{ statusTarget === 'suspended' ? t('team.suspend') : t('team.resume') }}
           </button>
         </div>
@@ -266,10 +264,12 @@ import BaseDialog from '@/components/common/BaseDialog.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import Icon from '@/components/icons/Icon.vue'
 import Pagination from '@/components/common/Pagination.vue'
+import Select from '@/components/common/Select.vue'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import AdminUserSearchSelect from '@/components/admin/AdminUserSearchSelect.vue'
 import TeamLedgerPanel from '@/components/team/TeamLedgerPanel.vue'
 import TeamRoleBadge from '@/components/team/TeamRoleBadge.vue'
+import { buildTeamMemberRows, teamMemberRole } from '@/components/team/teamMemberRows'
 import AdminOwnerBalanceDialog from '@/components/team/AdminOwnerBalanceDialog.vue'
 import TeamUsageSummaryCards from '@/components/team/TeamUsageSummaryCards.vue'
 
@@ -339,6 +339,17 @@ const teamQuotaPreview = computed(() => {
   return { delta, memberAfter: roundMoney(current + delta), ownerAfter: roundMoney(ownerBalance - delta) }
 })
 const detailMembers = computed(() => detail.value?.members ?? [])
+// 团队详情的成员列表：主账号作为第一行（无任何操作），其余为成员关系。
+const detailMemberRows = computed(() => buildTeamMemberRows(detail.value))
+const statusFilterOptions = computed(() => [
+  { value: '', label: t('team.allStatuses') },
+  { value: 'active', label: t('team.statusActive') },
+  { value: 'suspended', label: t('team.statusSuspended') }
+])
+const usageMemberSelectOptions = computed(() => [
+  { value: 0, label: t('team.filterMember') },
+  ...usageMemberOptions.value.map((member) => ({ value: member.user_id, label: memberDisplayName(member) }))
+])
 const memberSearchExcludedIds = computed(() => detail.value ? [detail.value.owner.user_id, ...detailMembers.value.map((member) => member.user_id)] : [])
 const usageMemberOptions = computed(() => detail.value ? [
   detail.value.owner,
@@ -632,18 +643,13 @@ function showError(error: unknown) { appStore.showError((error as { message?: st
 </script>
 
 <style scoped>
-.form-input { @apply min-h-11 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 dark:border-dark-600 dark:bg-dark-800 dark:text-white; }
-.btn { @apply inline-flex items-center justify-center rounded-md px-4 py-2 text-sm font-medium outline-none transition focus:ring-2 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:focus:ring-offset-dark-900; }
-.btn-primary { @apply bg-primary-600 text-white hover:bg-primary-700 focus:ring-primary-500; }
-.btn-secondary { @apply border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 focus:ring-primary-500 dark:border-dark-600 dark:bg-dark-800 dark:text-gray-200 dark:hover:bg-dark-700; }
-.btn-danger { @apply border border-red-600 bg-red-600 text-white hover:border-red-700 hover:bg-red-700 focus:ring-red-500 dark:border-red-500 dark:bg-red-600 dark:text-white dark:hover:bg-red-700; color: #fff !important; }
 .metric { @apply rounded-md border border-gray-200 bg-white p-4 dark:border-dark-700 dark:bg-dark-800; }
 .metric p { @apply text-sm font-medium text-gray-500 dark:text-gray-400; }
 .metric strong { @apply mt-2 block text-2xl font-semibold tabular-nums text-gray-900 dark:text-white; }
 .data-table { @apply w-full border-collapse text-left text-sm; }
 .data-table th { @apply border-b border-gray-200 px-3 py-3 text-xs font-semibold uppercase text-gray-500 dark:border-dark-700 dark:text-gray-400; }
 .data-table td { @apply border-b border-gray-100 px-3 py-3 text-gray-700 dark:border-dark-700 dark:text-gray-300; }
-.status-badge { @apply inline-flex rounded px-2 py-1 text-xs font-medium; }
+.status-badge { @apply inline-flex whitespace-nowrap rounded px-2 py-1 text-xs font-medium; }
 .status-active { @apply bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300; }
 .status-suspended { @apply bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300; }
 .icon-action { @apply inline-flex h-9 w-9 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-primary-50 hover:text-primary-600 focus:outline-none focus:ring-2 focus:ring-primary-500/30 dark:text-gray-400 dark:hover:bg-primary-900/20 dark:hover:text-primary-300; }

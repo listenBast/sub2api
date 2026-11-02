@@ -101,7 +101,10 @@ describe('admin team details', () => {
 
     const dialog = wrapper.findAll('[data-testid="dialog"]').find((item) => item.text().includes('空成员团队'))
     expect(dialog).toBeTruthy()
-    expect(dialog!.text()).toContain('team.empty')
+    // 成员为空时依然显示主账号这一行，且没有任何成员操作按钮。
+    expect(dialog!.find('[data-testid="admin-team-owner-row"]').exists()).toBe(true)
+    expect(dialog!.findAll('[data-testid="admin-team-member-row"]')).toHaveLength(0)
+    expect(dialog!.find('[data-testid="admin-team-owner-row"] button').exists()).toBe(false)
     expect(mocks.showError).toHaveBeenCalledWith('统计接口暂时不可用')
   })
 

@@ -70,5 +70,10 @@ declare module 'vue-router' {
      * i18n key for the page description
      */
     descriptionKey?: string
+
+    /**
+     * 用户端「团队中心」子页面标识（概览 / 成员 / 用量 / 花费统计 / 资金流水），由 TeamView 按路由渲染。
+     */
+    teamTab?: 'overview' | 'members' | 'usage' | 'spend' | 'ledger'
   }
 }

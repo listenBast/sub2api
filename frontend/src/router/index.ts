@@ -242,14 +242,71 @@ const routes: RouteRecordRaw[] = [
   },
   {
     path: '/team',
-    name: 'Team',
+    redirect: '/team/overview'
+  },
+  {
+    path: '/team/overview',
+    name: 'TeamOverview',
     component: () => import('@/views/user/TeamView.vue'),
     meta: {
       requiresAuth: true,
       requiresAdmin: false,
-      title: 'Team Center',
-      titleKey: 'team.title',
-      descriptionKey: 'team.subtitle'
+      title: 'Team Overview',
+      titleKey: 'team.pageTitleOverview',
+      descriptionKey: 'team.subtitle',
+      teamTab: 'overview'
+    }
+  },
+  {
+    path: '/team/members',
+    name: 'TeamMembers',
+    component: () => import('@/views/user/TeamView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: false,
+      title: 'Team Members',
+      titleKey: 'team.pageTitleMembers',
+      descriptionKey: 'team.subtitle',
+      teamTab: 'members'
+    }
+  },
+  {
+    path: '/team/usage',
+    name: 'TeamUsage',
+    component: () => import('@/views/user/TeamView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: false,
+      title: 'Team Usage',
+      titleKey: 'team.pageTitleUsage',
+      descriptionKey: 'team.subtitle',
+      teamTab: 'usage'
+    }
+  },
+  {
+    path: '/team/spend',
+    name: 'TeamSpend',
+    component: () => import('@/views/user/TeamView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: false,
+      title: 'Team Spend Statistics',
+      titleKey: 'team.pageTitleSpend',
+      descriptionKey: 'team.subtitle',
+      teamTab: 'spend'
+    }
+  },
+  {
+    path: '/team/ledger',
+    name: 'TeamLedger',
+    component: () => import('@/views/user/TeamView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: false,
+      title: 'Team Transactions',
+      titleKey: 'team.pageTitleLedger',
+      descriptionKey: 'team.subtitle',
+      teamTab: 'ledger'
     }
   },
   {

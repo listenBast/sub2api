@@ -21,7 +21,13 @@
     </button>
 
     <Transition name="date-picker-dropdown">
-      <div v-if="isOpen" class="date-picker-dropdown">
+      <div
+        v-if="isOpen"
+        ref="dropdownRef"
+        class="date-picker-dropdown"
+        :style="dropdownStyle"
+        data-testid="date-picker-dropdown"
+      >
         <!-- Quick presets -->
         <div class="date-picker-presets">
           <button
@@ -76,7 +82,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from '@/components/icons/Icon.vue'
 
@@ -89,6 +95,13 @@ interface DatePreset {
 interface Props {
   startDate: string
   endDate: string
+  /**
+   * Popover alignment relative to the trigger.
+   * - auto (default): open to the right of the trigger's left edge, but shift left whenever
+   *   that would overflow the viewport (e.g. the picker sits at the right end of a toolbar)
+   * - left / right: pin to the trigger's left / right edge (still clamped inside the viewport)
+   */
+  align?: 'auto' | 'left' | 'right'
 }
 
 interface Emits {
@@ -97,13 +110,17 @@ interface Emits {
   (e: 'change', range: { startDate: string; endDate: string; preset: string | null }): void
 }
 
-const props = defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), { align: 'auto' })
 const emit = defineEmits<Emits>()
 
 const { t, locale } = useI18n()
 
 const isOpen = ref(false)
 const containerRef = ref<HTMLElement | null>(null)
+const dropdownRef = ref<HTMLElement | null>(null)
+// Horizontal offset (px, relative to the trigger's left edge) that keeps the popover inside the viewport.
+const dropdownLeft = ref(0)
+const VIEWPORT_MARGIN = 8
 const localStartDate = ref(props.startDate)
 const localEndDate = ref(props.endDate)
 const activePreset = ref<string | null>('last24Hours')
@@ -256,6 +273,31 @@ const onDateChange = () => {
   }
 }
 
+const dropdownStyle = computed(() => ({
+  left: `${dropdownLeft.value}px`,
+  maxWidth: `calc(100vw - ${VIEWPORT_MARGIN * 2}px)`
+}))
+
+// Place the popover so that it never leaves the viewport: honour the requested alignment first,
+// then clamp (right edge first, left edge last so a too-wide popover still starts on-screen).
+const positionDropdown = () => {
+  const container = containerRef.value
+  const dropdown = dropdownRef.value
+  if (!container || !dropdown) return
+  const triggerRect = container.getBoundingClientRect()
+  const width = dropdown.offsetWidth
+  const viewportWidth = document.documentElement.clientWidth || window.innerWidth
+  let left = props.align === 'right' ? triggerRect.width - width : 0
+  const absoluteLeft = triggerRect.left + left
+  if (absoluteLeft + width > viewportWidth - VIEWPORT_MARGIN) {
+    left = viewportWidth - VIEWPORT_MARGIN - width - triggerRect.left
+  }
+  if (triggerRect.left + left < VIEWPORT_MARGIN) {
+    left = VIEWPORT_MARGIN - triggerRect.left
+  }
+  dropdownLeft.value = Math.round(left)
+}
+
 const toggle = () => {
   isOpen.value = !isOpen.value
 }
@@ -283,9 +325,17 @@ const handleEscape = (event: KeyboardEvent) => {
   }
 }
 
+const handleResize = () => {
+  if (isOpen.value) positionDropdown()
+}
+
 // Restore the applied range after dismissal, including parent updates from Apply.
 watch(isOpen, (open) => {
-  if (open) return
+  if (open) {
+    dropdownLeft.value = 0
+    void nextTick(positionDropdown)
+    return
+  }
   localStartDate.value = props.startDate
   localEndDate.value = props.endDate
   onDateChange()
@@ -311,6 +361,7 @@ watch(
 onMounted(() => {
   document.addEventListener('click', handleClickOutside)
   document.addEventListener('keydown', handleEscape)
+  window.addEventListener('resize', handleResize)
   // Initialize active preset detection
   onDateChange()
 })
@@ -318,13 +369,14 @@ onMounted(() => {
 onUnmounted(() => {
   document.removeEventListener('click', handleClickOutside)
   document.removeEventListener('keydown', handleEscape)
+  window.removeEventListener('resize', handleResize)
 })
 </script>
 
 <style scoped>
 .date-picker-trigger {
   @apply flex items-center gap-2;
-  @apply rounded-lg px-3 py-2 text-sm;
+  @apply rounded-xl px-4 py-2.5 text-sm;
   @apply bg-white dark:bg-dark-800;
   @apply border border-gray-200 dark:border-dark-600;
   @apply text-gray-700 dark:text-gray-300;
@@ -351,7 +403,7 @@ onUnmounted(() => {
 }
 
 .date-picker-dropdown {
-  @apply absolute left-0 z-[100] mt-2;
+  @apply absolute z-[100] mt-2;
   @apply bg-white dark:bg-dark-800;
   @apply rounded-xl;
   @apply border border-gray-200 dark:border-dark-700;

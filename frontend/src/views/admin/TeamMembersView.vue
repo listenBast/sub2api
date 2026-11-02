@@ -42,7 +42,7 @@
                   <button
                     v-if="member.status === 'active'"
                     type="button"
-                    class="btn min-h-10 px-3"
+                    class="btn"
                     :class="member.is_admin ? 'btn-secondary' : 'btn-primary'"
                     :disabled="submitting"
                     data-testid="team-member-toggle-admin"
@@ -73,7 +73,7 @@
             <button
               v-if="member.status === 'active'"
               type="button"
-              class="btn mt-4 min-h-11 w-full"
+              class="btn mt-4 w-full"
               :class="member.is_admin ? 'btn-secondary' : 'btn-primary'"
               :disabled="submitting"
               @click="askToggle(member)"
@@ -176,13 +176,10 @@ function showError(error: unknown) { appStore.showError((error as { message?: st
 </script>
 
 <style scoped>
-.btn { @apply inline-flex items-center justify-center rounded-md px-4 py-2 text-sm font-medium outline-none transition focus:ring-2 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:focus:ring-offset-dark-900; }
-.btn-primary { @apply bg-primary-600 text-white hover:bg-primary-700 focus:ring-primary-500; }
-.btn-secondary { @apply border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 focus:ring-primary-500 dark:border-dark-600 dark:bg-dark-800 dark:text-gray-200 dark:hover:bg-dark-700; }
 .data-table { @apply w-full border-collapse text-left text-sm; }
 .data-table th { @apply border-b border-gray-200 px-3 py-3 text-xs font-semibold uppercase text-gray-500 dark:border-dark-700 dark:text-gray-400; }
 .data-table td { @apply border-b border-gray-100 px-3 py-3 text-gray-700 dark:border-dark-700 dark:text-gray-300; }
-.status-badge { @apply inline-flex rounded px-2 py-1 text-xs font-medium; }
+.status-badge { @apply inline-flex whitespace-nowrap rounded px-2 py-1 text-xs font-medium; }
 .status-active { @apply bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300; }
 .status-muted { @apply bg-gray-100 text-gray-700 dark:bg-dark-700 dark:text-gray-300; }
 </style>

@@ -1,24 +1,29 @@
 <template>
-  <div class="flex flex-col gap-3 border-b border-gray-200 pb-5 dark:border-dark-700 sm:flex-row sm:items-end" data-testid="admin-team-picker">
-    <label class="sm:w-72">
-      <span class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">{{ t('team.search') }}</span>
-      <input v-model.trim="search" class="form-input w-full" :placeholder="t('team.searchTeamPlaceholder')" data-testid="admin-team-picker-search" @input="scheduleSearch" />
-    </label>
-    <label class="min-w-0 flex-1">
-      <span class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">{{ t('team.selectTeam') }}</span>
-      <select :value="modelValue ?? ''" class="form-input w-full" data-testid="admin-team-picker-select" @change="onSelect">
-        <option value="" disabled>{{ options.length || loading ? t('team.selectTeamPlaceholder') : t('team.noTeamsFound') }}</option>
-        <option v-for="team in options" :key="team.id" :value="team.id">{{ team.name }} · {{ team.owner.email }}</option>
-      </select>
-    </label>
+  <div class="grid items-end gap-3 border-b border-gray-200 pb-5 dark:border-dark-700 sm:grid-cols-[18rem_minmax(0,1fr)]" data-testid="admin-team-picker">
+    <div>
+      <label class="input-label" for="admin-team-picker-search">{{ t('team.search') }}</label>
+      <input id="admin-team-picker-search" v-model.trim="search" class="input" :placeholder="t('team.searchTeamPlaceholder')" data-testid="admin-team-picker-search" @input="scheduleSearch" />
+    </div>
+    <div class="min-w-0" data-testid="admin-team-picker-select">
+      <label class="input-label" for="admin-team-picker-trigger">{{ t('team.selectTeam') }}</label>
+      <Select
+        id="admin-team-picker-trigger"
+        :model-value="modelValue"
+        :options="selectOptions"
+        :placeholder="options.length || loading ? t('team.selectTeamPlaceholder') : t('team.noTeamsFound')"
+        :empty-text="t('team.noTeamsFound')"
+        @change="onSelect"
+      />
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { adminTeamsAPI, type TeamSummary } from '@/api/team'
 import { useAppStore } from '@/stores'
+import Select from '@/components/common/Select.vue'
 
 const props = defineProps<{
   modelValue: number | null
@@ -36,6 +41,7 @@ const appStore = useAppStore()
 const search = ref('')
 const options = ref<TeamSummary[]>([])
 const loading = ref(false)
+const selectOptions = computed(() => options.value.map((team) => ({ value: team.id, label: `${team.name} · ${team.owner.email}` })))
 let timer: ReturnType<typeof setTimeout> | null = null
 let seq = 0
 
@@ -63,8 +69,8 @@ function select(team: TeamSummary | null) {
   emit('change', team)
 }
 
-function onSelect(event: Event) {
-  const id = Number((event.target as HTMLSelectElement).value)
+function onSelect(value: string | number | boolean | null) {
+  const id = Number(value)
   select(options.value.find((team) => team.id === id) ?? null)
 }
 
@@ -76,7 +82,3 @@ function scheduleSearch() {
 onMounted(() => { void load() })
 onBeforeUnmount(() => { if (timer) clearTimeout(timer) })
 </script>
-
-<style scoped>
-.form-input { @apply min-h-11 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 dark:border-dark-600 dark:bg-dark-800 dark:text-white; }
-</style>

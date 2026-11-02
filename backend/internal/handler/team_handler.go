@@ -264,8 +264,9 @@ func (h *TeamHandler) Dissolve(c *gin.Context) {
 	response.Success(c, gin.H{"dissolved": true})
 }
 
+// ListUsage 主账号 / 管理员看团队全部用量；普通成员只看自己的用量（与资金流水的口径一致）。
 func (h *TeamHandler) ListUsage(c *gin.Context) {
-	ownerID, ctx, ok := currentTeamManager(c, h.teamService)
+	userID, ok := currentTeamUserID(c)
 	if !ok {
 		return
 	}
@@ -274,7 +275,22 @@ func (h *TeamHandler) ListUsage(c *gin.Context) {
 		response.BadRequest(c, err.Error())
 		return
 	}
-	items, pageResult, err := h.teamService.ListUsage(ctx, ownerID, filter)
+	manager, err := h.teamService.ResolveManager(c.Request.Context(), userID)
+	if errors.Is(err, service.ErrTeamManagerRequired) {
+		items, pageResult, ownErr := h.teamService.ListOwnUsage(c.Request.Context(), userID, filter)
+		if ownErr != nil {
+			response.ErrorFrom(c, ownErr)
+			return
+		}
+		response.Paginated(c, items, pageResult.Total, pageResult.Page, pageResult.PageSize)
+		return
+	}
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	ctx := service.WithTeamOperator(c.Request.Context(), userID)
+	items, pageResult, err := h.teamService.ListUsage(ctx, manager.OwnerID, filter)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return

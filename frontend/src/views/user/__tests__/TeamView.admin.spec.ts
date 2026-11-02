@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
+import { createMemoryHistory, createRouter } from 'vue-router'
 
 const mocks = vi.hoisted(() => ({
   getContext: vi.fn(),
@@ -57,12 +58,21 @@ const stubs = {
   Icon: true
 }
 
-async function mountAs(role: string, members?: ReturnType<typeof memberRow>[]) {
+const tabPaths = ['overview', 'members', 'usage', 'spend', 'ledger']
+async function mountAt(path: string, role: string, members?: ReturnType<typeof memberRow>[]) {
   mocks.getContext.mockResolvedValue(contextFor(role, members))
-  const wrapper = mount(TeamView, { global: { stubs } })
+  const router = createRouter({
+    history: createMemoryHistory(),
+    routes: tabPaths.map((tab) => ({ path: `/team/${tab}`, component: { template: '<div />' }, meta: { teamTab: tab } }))
+  })
+  await router.push(path)
+  await router.isReady()
+  const wrapper = mount(TeamView, { global: { stubs, plugins: [router] } })
   await flushPromises()
-  await wrapper.findAll('[role="tab"]').find((tab) => tab.text() === 'team.members')!.trigger('click')
-  return wrapper
+  return { wrapper, router }
+}
+async function mountAs(role: string, members?: ReturnType<typeof memberRow>[]) {
+  return (await mountAt('/team/members', role, members)).wrapper
 }
 
 describe('user TeamView with the admin role', () => {
@@ -77,7 +87,9 @@ describe('user TeamView with the admin role', () => {
     expect(wrapper.find('[data-testid="team-admin-notice"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="member-toggle-admin"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="member-transfer-owner"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="team-dissolve"]').exists()).toBe(true)
+    // 解散团队放在概览页，且只属于主账号
+    const overview = (await mountAt('/team/overview', 'owner')).wrapper
+    expect(overview.find('[data-testid="team-dissolve"]').exists()).toBe(true)
   })
 
   it('gives an admin the manager UI but no transfer or admin-promotion controls', async () => {
@@ -87,22 +99,19 @@ describe('user TeamView with the admin role', () => {
     expect(wrapper.find('[data-testid="member-transfer-owner"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="member-toggle-admin"]').exists()).toBe(false)
     // 解散团队只属于主账号
-    expect(wrapper.find('[data-testid="team-dissolve"]').exists()).toBe(false)
+    const overview = (await mountAt('/team/overview', 'admin')).wrapper
+    expect(overview.find('[data-testid="team-dissolve"]').exists()).toBe(false)
     expect(wrapper.text()).toContain('team.remove')
   })
 
   it('does not show the spend statistics tab content to plain members', async () => {
-    mocks.getContext.mockResolvedValue(contextFor('member'))
-    const wrapper = mount(TeamView, { global: { stubs } })
-    await flushPromises()
-    expect(wrapper.findAll('[role="tab"]').map((t) => t.text())).not.toContain('team.spendStats')
+    const { wrapper, router } = await mountAt('/team/spend', 'member')
+    expect(wrapper.find('[data-testid="spend-panel"]').exists()).toBe(false)
+    expect(router.currentRoute.value.path).toBe('/team/overview')
   })
 
   it('shows the per-member spend tab to admins', async () => {
-    mocks.getContext.mockResolvedValue(contextFor('admin'))
-    const wrapper = mount(TeamView, { global: { stubs } })
-    await flushPromises()
-    await wrapper.findAll('[role="tab"]').find((tab) => tab.text() === 'team.spendStats')!.trigger('click')
+    const { wrapper } = await mountAt('/team/spend', 'admin')
     expect(wrapper.find('[data-testid="spend-panel"]').exists()).toBe(true)
   })
 

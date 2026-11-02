@@ -2,6 +2,12 @@ export default {
   team: {
     title: '团队中心',
     adminTitle: '团队管理',
+    pageTitleOverview: '团队概览',
+    pageTitleMembers: '团队成员',
+    pageTitleUsage: '团队用量',
+    pageTitleSpend: '团队花费统计',
+    pageTitleLedger: '团队资金流水',
+    memberUsageNotice: '这里仅显示你本人在团队中的用量。',
     role: '角色',
     roleOwner: '主账号',
     roleAdmin: '管理员',

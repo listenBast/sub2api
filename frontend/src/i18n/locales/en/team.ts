@@ -2,6 +2,12 @@ export default {
   team: {
     title: 'Team Center',
     adminTitle: 'Team Management',
+    pageTitleOverview: 'Team Overview',
+    pageTitleMembers: 'Team Members',
+    pageTitleUsage: 'Team Usage',
+    pageTitleSpend: 'Team Spend Statistics',
+    pageTitleLedger: 'Team Transactions',
+    memberUsageNotice: 'Only your own usage in the team is shown here.',
     role: 'Role',
     roleOwner: 'Owner',
     roleAdmin: 'Admin',

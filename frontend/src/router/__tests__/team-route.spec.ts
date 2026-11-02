@@ -41,7 +41,11 @@ vi.mock('@/composables/useRoutePrefetch', () => ({
 
 describe('team routes', () => {
   it.each([
-    ['Team', 'Team Center', 'team.title'],
+    ['TeamOverview', 'Team Overview', 'team.pageTitleOverview'],
+    ['TeamMembers', 'Team Members', 'team.pageTitleMembers'],
+    ['TeamUsage', 'Team Usage', 'team.pageTitleUsage'],
+    ['TeamSpend', 'Team Spend Statistics', 'team.pageTitleSpend'],
+    ['TeamLedger', 'Team Transactions', 'team.pageTitleLedger'],
     ['AdminTeams', 'Team Management', 'team.adminTitle'],
     ['AdminTeamMembers', 'Team Members & Admins', 'team.adminMembersTitle'],
     ['AdminTeamUsage', 'Team Spend Statistics', 'team.adminUsageTitle'],
@@ -63,6 +67,25 @@ describe('team routes', () => {
       expect(record?.path).toBe(path)
       expect(record?.meta.requiresAdmin).toBe(true)
       expect(record?.meta.requiresAuth).toBe(true)
+    }
+  })
+
+  it('turns the user team center into a submenu: /team redirects to the overview and each child carries its tab', async () => {
+    const { default: router } = await import('@/router')
+    const records = router.getRoutes()
+    expect(records.find((record) => record.path === '/team')?.redirect).toBe('/team/overview')
+    for (const [name, path, tab] of [
+      ['TeamOverview', '/team/overview', 'overview'],
+      ['TeamMembers', '/team/members', 'members'],
+      ['TeamUsage', '/team/usage', 'usage'],
+      ['TeamSpend', '/team/spend', 'spend'],
+      ['TeamLedger', '/team/ledger', 'ledger'],
+    ]) {
+      const record = records.find((item) => item.name === name)
+      expect(record?.path).toBe(path)
+      expect(record?.meta.teamTab).toBe(tab)
+      expect(record?.meta.requiresAuth).toBe(true)
+      expect(record?.meta.requiresAdmin).toBe(false)
     }
   })
 })

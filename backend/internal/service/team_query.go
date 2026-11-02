@@ -280,6 +280,20 @@ func (s *TeamService) ListUsage(ctx context.Context, ownerID int64, filter TeamU
 	return s.listTeamUsage(ctx, teamEntity.ID, filter)
 }
 
+// ListOwnUsage 普通团队成员查看自己的用量：忽略任何成员筛选，范围固定为当前用户本人。
+// 只接受已加入（active / exit_pending）的成员；受邀未接受或不在任何团队的用户得不到团队用量。
+func (s *TeamService) ListOwnUsage(ctx context.Context, userID int64, filter TeamUsageFilter) ([]TeamUsageItem, *pagination.PaginationResult, error) {
+	membership, err := s.client.TeamMembership.Query().Where(dbmembership.UserIDEQ(userID)).Only(ctx)
+	if err != nil {
+		return nil, nil, translateTeamMemberError(err)
+	}
+	if membership.Status != TeamMembershipActive && membership.Status != TeamMembershipExitPending {
+		return nil, nil, ErrTeamMemberNotFound
+	}
+	filter.MemberID = userID
+	return s.listTeamUsage(ctx, membership.TeamID, filter)
+}
+
 func (s *TeamService) ListAdminUsage(ctx context.Context, teamID int64, filter TeamUsageFilter) ([]TeamUsageItem, *pagination.PaginationResult, error) {
 	if _, err := s.client.Team.Get(ctx, teamID); err != nil {
 		return nil, nil, translateTeamError(err)

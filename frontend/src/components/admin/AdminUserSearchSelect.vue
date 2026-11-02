@@ -6,7 +6,7 @@
         v-model="searchQuery"
         type="text"
         autocomplete="off"
-        class="user-search-input w-full pl-9 pr-10"
+        class="input w-full pl-9 pr-10"
         :placeholder="placeholder"
         :aria-expanded="showDropdown"
         aria-autocomplete="list"
@@ -162,5 +162,4 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.user-search-input { @apply min-h-11 rounded-md border border-gray-300 bg-white py-2 text-sm text-gray-900 outline-none transition focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 dark:border-dark-600 dark:bg-dark-800 dark:text-white; }
 </style>

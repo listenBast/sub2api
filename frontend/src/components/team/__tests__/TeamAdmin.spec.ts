@@ -28,6 +28,7 @@ vi.mock('@/api/team', () => ({
 }))
 
 import type { TeamMember, TeamMemberSpendStats } from '@/api/team'
+import Select from '@/components/common/Select.vue'
 import AdminOwnerBalanceDialog from '../AdminOwnerBalanceDialog.vue'
 import AdminTeamPicker from '../AdminTeamPicker.vue'
 import TeamMemberActions from '../TeamMemberActions.vue'
@@ -194,7 +195,7 @@ describe('AdminTeamPicker', () => {
     const wrapper = mount(AdminTeamPicker, { props: { modelValue: null } })
     await flushPromises()
     expect(wrapper.emitted('update:modelValue')?.[0]).toEqual([3])
-    await wrapper.find('select').setValue('4')
+    wrapper.findComponent(Select).vm.$emit('change', 4, null)
     expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([4])
     expect(wrapper.emitted('change')?.at(-1)?.[0]).toMatchObject({ id: 4 })
   })
