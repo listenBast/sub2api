@@ -243,6 +243,7 @@ import Icon from '@/components/icons/Icon.vue'
 import UserErrorRequestsTable from '@/components/user/UserErrorRequestsTable.vue'
 import { getPersistedPageSize } from '@/composables/usePersistedPageSize'
 import { formatReasoningEffort } from '@/utils/format'
+import { formatUsageApiKeyName } from '@/utils/usageApiKeyName'
 import { getBillingModeLabel, getDisplayBillingMode as resolveDisplayBillingMode } from '@/utils/billingMode'
 import { resolveUsageRequestType, requestTypeToLegacyStream } from '@/utils/usageRequestType'
 import type {
@@ -696,7 +697,7 @@ const exportToCSV = async () => {
     ]
     const rows = allLogs.map((log) => [
       log.created_at,
-      log.api_key?.name || '',
+      formatUsageApiKeyName(log.api_key, t),
       log.model,
       formatReasoningEffort(log.reasoning_effort),
       log.inbound_endpoint || '',

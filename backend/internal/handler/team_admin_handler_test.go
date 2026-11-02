@@ -134,8 +134,36 @@ func TestTeamAdminHTTP_RoleChangeIsImmediateAndTransferStaysOwnerOnly(t *testing
 	require.Equal(t, http.StatusForbidden, f.do(f.admin.ID, http.MethodPut, "/team", `{"name":"again"}`).Code)
 	require.Equal(t, http.StatusForbidden, f.do(f.admin.ID, http.MethodPost, memberAlloc, `{"amount":5}`).Code)
 
-	// 管理员可以解散（与主账号一致），主账号转让依旧可用。
+	// 主账号转让依旧可用。
 	require.Equal(t, http.StatusOK, f.do(f.owner.ID, http.MethodPost, "/team/transfer-owner", transfer).Code)
+}
+
+func TestTeamAdminHTTP_DissolveIsOwnerOnly(t *testing.T) {
+	f := newTeamHTTPFixture(t)
+	adminPath := fmt.Sprintf("/team/members/%d/admin", f.admin.ID)
+	require.Equal(t, http.StatusOK, f.do(f.owner.ID, http.MethodPut, adminPath, `{"is_admin":true}`).Code)
+
+	// 管理员解散团队 -> 403 TEAM_OWNER_REQUIRED，团队仍然存在，且管理员其他权限不受影响。
+	rec := f.do(f.admin.ID, http.MethodDelete, "/team", "")
+	require.Equal(t, http.StatusForbidden, rec.Code)
+	var body struct {
+		Reason string `json:"reason"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+	require.Equal(t, "TEAM_OWNER_REQUIRED", body.Reason)
+	teamCtx, err := f.svc.GetContext(context.Background(), f.owner.ID)
+	require.NoError(t, err)
+	require.NotNil(t, teamCtx.Team)
+	require.Equal(t, http.StatusOK, f.do(f.admin.ID, http.MethodPut, "/team", `{"name":"still-manager"}`).Code)
+
+	// 普通成员同样 403。
+	require.Equal(t, http.StatusForbidden, f.do(f.member.ID, http.MethodDelete, "/team", "").Code)
+
+	// 主账号可以解散。
+	require.Equal(t, http.StatusOK, f.do(f.owner.ID, http.MethodDelete, "/team", "").Code)
+	after, err := f.svc.GetContext(context.Background(), f.owner.ID)
+	require.NoError(t, err)
+	require.Nil(t, after.Team)
 }
 
 func TestTeamAdminHTTP_LedgerScopeFollowsRole(t *testing.T) {

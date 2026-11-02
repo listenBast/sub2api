@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	dbent "github.com/Wei-Shaw/sub2api/ent"
 	dbaccount "github.com/Wei-Shaw/sub2api/ent/account"
 	dbapikey "github.com/Wei-Shaw/sub2api/ent/apikey"
 	dbgroup "github.com/Wei-Shaw/sub2api/ent/group"
@@ -402,14 +403,31 @@ func (r *usageLogRepository) loadAPIKeys(ctx context.Context, ids []int64) (map[
 	if len(ids) == 0 {
 		return out, nil
 	}
-	models, err := r.client.APIKey.Query().Where(dbapikey.IDIn(ids...)).All(ctx)
+	// 软删除的 Key 也要加载：用量记录需要显示它原来的名称（并标记已删除）。
+	models, err := r.client.APIKey.Query().Where(dbapikey.IDIn(ids...)).All(mixins.SkipSoftDelete(ctx))
 	if err != nil {
 		return nil, err
 	}
 	for _, m := range models {
+		if m.DeletedAt != nil {
+			out[m.ID] = deletedAPIKeySummary(m)
+			continue
+		}
 		out[m.ID] = apiKeyEntityToService(m)
 	}
 	return out, nil
+}
+
+// deletedAPIKeySummary 只保留已删除 Key 的身份信息（ID、所属用户、名称、删除时间）。
+// 软删除时 key 字段被改写为 __deleted__ 墓碑，这里也不会把它（或任何配置、额度）带进用量记录响应。
+func deletedAPIKeySummary(m *dbent.APIKey) *service.APIKey {
+	return &service.APIKey{
+		ID:        m.ID,
+		UserID:    m.UserID,
+		Name:      m.Name,
+		CreatedAt: m.CreatedAt,
+		DeletedAt: m.DeletedAt,
+	}
 }
 
 func (r *usageLogRepository) loadAccounts(ctx context.Context, ids []int64) (map[int64]*service.Account, error) {

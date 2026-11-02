@@ -77,6 +77,7 @@ describe('user TeamView with the admin role', () => {
     expect(wrapper.find('[data-testid="team-admin-notice"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="member-toggle-admin"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="member-transfer-owner"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="team-dissolve"]').exists()).toBe(true)
   })
 
   it('gives an admin the manager UI but no transfer or admin-promotion controls', async () => {
@@ -85,6 +86,8 @@ describe('user TeamView with the admin role', () => {
     expect(wrapper.text()).toContain('team.inviteMember')
     expect(wrapper.find('[data-testid="member-transfer-owner"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="member-toggle-admin"]').exists()).toBe(false)
+    // 解散团队只属于主账号
+    expect(wrapper.find('[data-testid="team-dissolve"]').exists()).toBe(false)
     expect(wrapper.text()).toContain('team.remove')
   })
 

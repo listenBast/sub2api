@@ -9,6 +9,7 @@ import (
 	"time"
 
 	dbteamtx "github.com/Wei-Shaw/sub2api/ent/teamtransaction"
+	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -194,7 +195,35 @@ func TestTeamAdmin_CannotTransferOwnershipButCanDoEverythingElse(t *testing.T) {
 	_, err = svc.RespondInvitation(ctx, extra.ID, true)
 	require.NoError(t, err)
 	require.NoError(t, svc.RemoveMember(mctx, ownerID, extra.ID))
+	// 解散只属于主账号：管理员解析为 ErrTeamNotOwner，主账号可以。
+	_, err = svc.ResolveOwner(ctx, adm.ID)
+	require.ErrorIs(t, err, ErrTeamNotOwner)
+	ownerManager, err := svc.ResolveOwner(ctx, owner.ID)
+	require.NoError(t, err)
+	require.Equal(t, owner.ID, ownerManager.OwnerID)
 	require.NoError(t, svc.Dissolve(mctx, ownerID))
+}
+
+func TestTeamAdmin_ResolveOwnerRejectsAdminsMembersAndOutsiders(t *testing.T) {
+	svc, owner, adm, member, outsider := setupTeamAdminTest(t)
+	ctx := context.Background()
+	_, err := svc.SetMemberAdmin(ctx, owner.ID, adm.ID, true)
+	require.NoError(t, err)
+	_, err = svc.ResolveOwner(ctx, adm.ID)
+	require.ErrorIs(t, err, ErrTeamNotOwner)
+	require.Equal(t, "TEAM_OWNER_REQUIRED", infraerrors.Reason(err))
+	require.Equal(t, 403, infraerrors.Code(err))
+	_, err = svc.ResolveOwner(ctx, member.ID)
+	require.ErrorIs(t, err, ErrTeamManagerRequired)
+	_, err = svc.ResolveOwner(ctx, outsider.ID)
+	require.ErrorIs(t, err, ErrTeamNotFound)
+	// 转让后新主账号可以解散，前主账号（现普通成员）不行。
+	_, err = svc.TransferOwnership(ctx, owner.ID, adm.ID)
+	require.NoError(t, err)
+	_, err = svc.ResolveOwner(ctx, owner.ID)
+	require.Error(t, err)
+	_, err = svc.ResolveOwner(ctx, adm.ID)
+	require.NoError(t, err)
 }
 
 func TestTeamAdmin_OwnershipTransferResetsPreviousOwnerAndNewOwnerAdminFlag(t *testing.T) {

@@ -98,6 +98,7 @@ func APIKeyFromService(k *service.APIKey) *APIKey {
 		ExpiresAt:          k.ExpiresAt,
 		CreatedAt:          k.CreatedAt,
 		UpdatedAt:          k.UpdatedAt,
+		DeletedAt:          k.DeletedAt,
 		CurrentConcurrency: k.CurrentConcurrency,
 		BalanceMode:        service.NormalizeBalanceMode(k.BalanceMode),
 		RateLimit5h:        k.RateLimit5h,

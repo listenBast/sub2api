@@ -751,6 +751,8 @@ export interface ApiKey {
   user_id: number
   key: string
   name: string
+  /** 仅用量记录里已被删除的 Key 会带上（此时 key 为空，只剩名称）。 */
+  deleted_at?: string | null
   group_id: number | null
   status: 'active' | 'inactive' | 'quota_exhausted' | 'expired'
   ip_whitelist: string[]

@@ -246,12 +246,18 @@ func (h *TeamHandler) UpdateMemberLimits(c *gin.Context) {
 	response.Success(c, member)
 }
 
+// Dissolve 解散团队，仅主账号可用；团队管理员会收到 403 TEAM_OWNER_REQUIRED。
 func (h *TeamHandler) Dissolve(c *gin.Context) {
-	ownerID, ctx, ok := currentTeamManager(c, h.teamService)
+	userID, ok := currentTeamUserID(c)
 	if !ok {
 		return
 	}
-	if err := h.teamService.Dissolve(ctx, ownerID); err != nil {
+	owner, err := h.teamService.ResolveOwner(c.Request.Context(), userID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	if err := h.teamService.Dissolve(service.WithTeamOperator(c.Request.Context(), userID), owner.OwnerID); err != nil {
 		response.ErrorFrom(c, err)
 		return
 	}

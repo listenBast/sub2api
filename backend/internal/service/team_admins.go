@@ -2,8 +2,9 @@ package service
 
 // 团队管理员（sub2api 二开，fork-only）。
 //
-// 主账号可以把已加入的成员设为团队管理员。管理员拥有除“转让主账号”之外与主账号一致的团队管理权限
-// （邀请/移除成员、划拨额度、审批退出、修改备注与限额、改名、解散、查看用量与流水、成员花费统计）。
+// 主账号可以把已加入的成员设为团队管理员。管理员拥有除“转让主账号”和“解散团队”之外与主账号一致的团队管理权限
+// （邀请/移除成员、划拨额度、审批退出、修改备注与限额、改名、查看用量与流水、成员花费统计）；
+// 转让与解散只属于主账号（ResolveOwner）。
 //
 // 权限不进入任何会话、令牌或 API Key 认证快照：每次请求都经 ResolveManager 从数据库读取当前
 // 身份（主账号 / 活跃管理员 / 其他），所以升降级后下一次请求立即生效；站点管理员也可通过
@@ -97,6 +98,19 @@ func (s *TeamService) ResolveManager(ctx context.Context, userID int64) (*TeamMa
 		return nil, translateTeamError(err)
 	}
 	return &TeamManager{TeamID: teamEntity.ID, OwnerID: teamEntity.OwnerID, UserID: userID}, nil
+}
+
+// ResolveOwner 与 ResolveManager 一样每次读库，但只接受主账号：团队管理员会得到 ErrTeamNotOwner（403 TEAM_OWNER_REQUIRED）。
+// 用于只有主账号能做的操作（如解散团队）。
+func (s *TeamService) ResolveOwner(ctx context.Context, userID int64) (*TeamManager, error) {
+	manager, err := s.ResolveManager(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if !manager.IsOwner {
+		return nil, ErrTeamNotOwner
+	}
+	return manager, nil
 }
 
 // SetMemberAdmin 主账号设置/取消团队管理员。只有主账号能调用（管理员不能任命或撤销管理员）。

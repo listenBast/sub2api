@@ -371,6 +371,7 @@ export default {
     inSelectedRange: '所选范围内',
     perRequest: '每次请求',
     apiKeyFilter: 'API 密钥',
+    apiKeyDeleted: '{name}（已删除）',
     allApiKeys: '全部密钥',
     timeRange: '时间范围',
     exportCsv: '导出 CSV',

@@ -43,9 +43,11 @@ type APIKey struct {
 	LastUsedIP          *string
 	CreatedAt           time.Time
 	UpdatedAt           time.Time
-	User                *User
-	Group               *Group
-	CurrentConcurrency  int
+	// DeletedAt 仅在用量记录里加载已软删除的 Key 时设置（此时只有名称等身份信息，没有 Key 值）。
+	DeletedAt          *time.Time
+	User               *User
+	Group              *Group
+	CurrentConcurrency int
 
 	// Quota fields
 	Quota     float64    // Quota limit in USD (0 = unlimited)

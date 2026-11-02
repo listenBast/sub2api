@@ -79,7 +79,7 @@
             <h2 v-else class="text-xl font-semibold text-gray-900 dark:text-white">{{ context.team.name }}</h2>
             <button v-if="!renaming" class="btn btn-secondary min-h-10 px-3" @click="startRename">{{ t('common.edit') }}</button>
             <button v-else class="btn btn-primary min-h-10 px-3" :disabled="submitting" @click="saveTeamName">{{ t('common.save') }}</button>
-            <button v-if="!renaming" class="btn btn-danger min-h-10 gap-2 px-3" @click="openConfirmation('dissolve')">
+            <button v-if="!renaming && isOwnerRole" data-testid="team-dissolve" class="btn btn-danger min-h-10 gap-2 px-3" @click="openConfirmation('dissolve')">
               <Icon name="trash" size="sm" />
               {{ t('team.dissolve') }}
             </button>

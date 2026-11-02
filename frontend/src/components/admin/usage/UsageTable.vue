@@ -45,7 +45,7 @@
         </template>
 
         <template #cell-api_key="{ row }">
-          <span class="text-sm text-gray-900 dark:text-white">{{ row.api_key?.name || '-' }}</span>
+          <span class="text-sm text-gray-900 dark:text-white">{{ formatUsageApiKeyName(row.api_key, t) || '-' }}</span>
         </template>
 
         <template #cell-account="{ row }">
@@ -540,6 +540,7 @@ import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { formatDateTime, formatReasoningEffort, reasoningEffortValuesEqual } from '@/utils/format'
 import { formatCacheTokens, formatMultiplier } from '@/utils/formatters'
+import { formatUsageApiKeyName } from '@/utils/usageApiKeyName'
 import { formatTokenPricePerMillion } from '@/utils/usagePricing'
 import { getUsageServiceTierLabel } from '@/utils/usageServiceTier'
 import { resolveUsageRequestType } from '@/utils/usageRequestType'

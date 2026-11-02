@@ -366,6 +366,7 @@ export default {
     inSelectedRange: 'in selected range',
     perRequest: 'per request',
     apiKeyFilter: 'API Key',
+    apiKeyDeleted: '{name} (deleted)',
     allApiKeys: 'All API Keys',
     timeRange: 'Time Range',
     exportCsv: 'Export CSV',
