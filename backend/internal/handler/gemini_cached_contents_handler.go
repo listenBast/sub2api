@@ -207,7 +207,7 @@ func (h *GatewayHandler) GeminiCachedContentsCreate(c *gin.Context) {
 		}
 		account = latest
 		attempts++
-		setOpsSelectedAccount(c, account.ID, account.Platform)
+		setOpsSelectedAccountFor(c, account)
 
 		mappedModel := account.GetMappedModel(modelName)
 		usageFields := clientRequestedUsageFields(c, channelMapping, reqModel, mappedModel)
@@ -456,7 +456,7 @@ func (h *GatewayHandler) GeminiCachedContentsPatch(c *gin.Context) {
 		defer chargeDone()
 	}
 
-	setOpsSelectedAccount(c, account.ID, account.Platform)
+	setOpsSelectedAccountFor(c, account)
 	mutation, err := svc.BeginMutation(c.Request.Context(), record)
 	if err != nil {
 		switch {
@@ -537,7 +537,7 @@ func (h *GatewayHandler) GeminiCachedContentsDelete(c *gin.Context) {
 		return
 	}
 	if account != nil {
-		setOpsSelectedAccount(c, account.ID, account.Platform)
+		setOpsSelectedAccountFor(c, account)
 		if err := svc.DeleteUpstream(c.Request.Context(), account, record); err != nil {
 			var upErr *service.GeminiCachedContentUpstreamError
 			if !errors.As(err, &upErr) {

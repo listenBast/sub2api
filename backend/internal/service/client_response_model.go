@@ -22,6 +22,8 @@ func setAnthropicPublicModel(c *gin.Context, requested, upstream string) {
 		return
 	}
 	c.Set(ctxKeyAnthropicPublicModel, requested)
+	RegisterClientScrubRequestedModel(c, requested)
+	RegisterClientScrubUpstreamModel(c, upstream)
 }
 
 func anthropicPublicModel(c *gin.Context) string {
@@ -90,31 +92,46 @@ func scrubUpstreamModelName(body []byte, upstreamModel, requestedModel string) [
 func ScrubUpstreamModelText(text, upstreamModel, requestedModel string) string {
 	upstreamModel = strings.TrimSpace(upstreamModel)
 	requestedModel = strings.TrimSpace(requestedModel)
-	if text == "" || upstreamModel == "" || requestedModel == "" || upstreamModel == requestedModel {
+	if upstreamModel == requestedModel {
 		return text
 	}
-	if !strings.Contains(text, upstreamModel) {
+	return scrubModelNameWithReplacement(text, upstreamModel, requestedModel)
+}
+
+// scrubModelNameWithReplacement replaces whole-word occurrences of model in
+// text with replacement. A "models/" resource prefix (Gemini / Vertex) does not
+// count as part of the name.
+func scrubModelNameWithReplacement(text, model, replacement string) string {
+	model = strings.TrimSpace(model)
+	replacement = strings.TrimSpace(replacement)
+	if text == "" || model == "" || replacement == "" || model == replacement {
+		return text
+	}
+	if !strings.Contains(text, model) {
 		return text
 	}
 	var b strings.Builder
 	rest := text
+	consumed := 0
 	for {
-		i := strings.Index(rest, upstreamModel)
+		i := strings.Index(rest, model)
 		if i < 0 {
 			b.WriteString(rest)
 			break
 		}
-		end := i + len(upstreamModel)
-		beforeOK := i == 0 || !isModelNameChar(rest[i-1])
+		abs := consumed + i
+		end := i + len(model)
+		beforeOK := abs == 0 || !isModelNameChar(text[abs-1]) || strings.HasSuffix(text[:abs], "models/")
 		afterOK := end >= len(rest) || !isModelNameChar(rest[end]) ||
 			(rest[end] == '.' && (end+1 >= len(rest) || !isModelNameChar(rest[end+1])))
 		b.WriteString(rest[:i])
 		if beforeOK && afterOK {
-			b.WriteString(requestedModel)
+			b.WriteString(replacement)
 		} else {
-			b.WriteString(upstreamModel)
+			b.WriteString(model)
 		}
 		rest = rest[end:]
+		consumed += end
 	}
 	return b.String()
 }

@@ -76,6 +76,7 @@ func (s *GatewayService) ForwardAsResponses(
 			mappedModel = normalized
 		}
 	}
+	RegisterClientScrubUpstreamModel(c, mappedModel)
 	if err := validateClaude55Request(body, mappedModel); err != nil {
 		writeResponsesError(c, http.StatusBadRequest, "invalid_request_error", err.Error())
 		return nil, err

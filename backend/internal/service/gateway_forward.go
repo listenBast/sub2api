@@ -132,6 +132,7 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 		passthroughModel := parsed.Model
 		if passthroughModel != "" {
 			if mappedModel := account.GetMappedModel(passthroughModel); mappedModel != passthroughModel {
+				RegisterClientScrubUpstreamModel(c, mappedModel)
 				passthroughBody = s.replaceModelInBody(passthroughBody, mappedModel)
 				logger.LegacyPrintf("service.gateway", "Passthrough model mapping: %s -> %s (account: %s)", parsed.Model, mappedModel, account.Name)
 				passthroughModel = mappedModel
@@ -313,6 +314,7 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 		}
 	}
 	if mappedModel != reqModel {
+		RegisterClientScrubUpstreamModel(c, mappedModel)
 		// 替换请求体中的模型名
 		if err := replaceBody(s.replaceModelInBody(body, mappedModel)); err != nil {
 			return nil, err
