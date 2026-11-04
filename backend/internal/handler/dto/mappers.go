@@ -758,6 +758,8 @@ func UsageLogFromService(l *service.UsageLog) *UsageLog {
 		return nil
 	}
 	u := usageLogFromServiceUser(l)
+	// Account IDs are an internal/admin-only detail (they reveal pool routing).
+	u.AccountID = 0
 	return &u
 }
 

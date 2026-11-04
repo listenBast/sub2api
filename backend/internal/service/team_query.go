@@ -339,7 +339,7 @@ func (s *TeamService) listTeamUsage(ctx context.Context, teamID int64, filter Te
 			memberEmail = log.Edges.User.Email
 		}
 		items = append(items, TeamUsageItem{
-			ID: log.ID, UserID: log.UserID, MemberEmail: memberEmail, RequestID: log.RequestID, Model: log.Model,
+			ID: log.ID, UserID: log.UserID, MemberEmail: memberEmail, RequestID: log.RequestID, Model: teamUsageClientModel(log),
 			InputTokens: log.InputTokens, OutputTokens: log.OutputTokens,
 			CacheTokens: log.CacheCreationTokens + log.CacheReadTokens,
 			TotalTokens: log.InputTokens + log.OutputTokens + log.CacheCreationTokens + log.CacheReadTokens,
@@ -673,4 +673,13 @@ func containsTeamUser(userIDs []int64, userID int64) bool {
 		}
 	}
 	return false
+}
+
+// teamUsageClientModel returns the model the client requested. Team owners and
+// team admins are ordinary users and must never see mapped/upstream model names.
+func teamUsageClientModel(log *dbent.UsageLog) string {
+	if log.RequestedModel != nil && strings.TrimSpace(*log.RequestedModel) != "" {
+		return *log.RequestedModel
+	}
+	return log.Model
 }

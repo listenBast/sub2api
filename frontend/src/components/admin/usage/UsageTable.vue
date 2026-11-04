@@ -54,7 +54,7 @@
 
         <template #cell-model="{ row }">
           <div class="space-y-0.5 text-xs">
-            <div v-if="row.model_mapping_chain && row.model_mapping_chain.includes('→')" class="space-y-0.5">
+            <div v-if="showModelMapping && row.model_mapping_chain && row.model_mapping_chain.includes('→')" class="space-y-0.5">
               <div v-for="(step, i) in row.model_mapping_chain.split('→')" :key="i"
                    class="break-all"
                    :class="i === 0 ? 'font-medium text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400'"
@@ -62,7 +62,7 @@
                 <span v-if="i > 0" class="mr-0.5">↳</span>{{ step }}
               </div>
             </div>
-            <div v-else-if="row.upstream_model && row.upstream_model !== row.model" class="space-y-0.5">
+            <div v-else-if="showModelMapping && row.upstream_model && row.upstream_model !== row.model" class="space-y-0.5">
               <div class="break-all font-medium text-gray-900 dark:text-white">
                 {{ row.model }}
               </div>
@@ -72,7 +72,7 @@
             </div>
             <span v-else class="font-medium text-gray-900 dark:text-white">{{ row.model }}</span>
             <div
-              v-if="row.upstream_model_mismatch === true && row.upstream_response_model"
+              v-if="showModelMapping && row.upstream_model_mismatch === true && row.upstream_response_model"
               class="break-all pl-3 text-[11px]"
               :class="isLikelyModelVariant(row) ? 'text-amber-600 dark:text-amber-400' : 'text-orange-600 dark:text-orange-400'"
               :title="modelAuditTitle(row)"
@@ -600,6 +600,8 @@ interface Props {
   defaultSortOrder?: 'asc' | 'desc'
   showAccountBilling?: boolean
   showUpstreamEndpoint?: boolean
+  /** 是否展示上游模型/映射链/上游响应模型（仅站点管理员后台开启；用户侧一律关闭） */
+  showModelMapping?: boolean
   /** 嵌入统一卡片内使用：去掉自身卡片外观 */
   flat?: boolean
 }
@@ -611,6 +613,7 @@ const props = withDefaults(defineProps<Props>(), {
   defaultSortOrder: 'asc',
   showAccountBilling: true,
   showUpstreamEndpoint: true,
+  showModelMapping: true,
   flat: false
 })
 const emit = defineEmits<{
@@ -628,6 +631,7 @@ const ipGeoBatchLoading = ref(false)
 const showIpGeoToolbar = computed(() => props.columns.some((col) => col.key === 'ip_address'))
 
 const hasReasoningEffortMapping = (row: AdminUsageLog): boolean => {
+  if (!props.showModelMapping) return false
   const requested = row.reasoning_effort?.trim() || ''
   const forwarded = row.upstream_reasoning_effort?.trim() || ''
   return requested !== '' && forwarded !== '' && !reasoningEffortValuesEqual(requested, forwarded)

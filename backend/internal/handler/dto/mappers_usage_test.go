@@ -332,3 +332,53 @@ func TestUsageLogFromService_PreservesHistoricalMissingImageSize(t *testing.T) {
 func f64Ptr(value float64) *float64 {
 	return &value
 }
+
+func TestUsageLogFromService_UserDTOHidesMappingAndAccountFields(t *testing.T) {
+	t.Parallel()
+
+	upstream := "gpt-6-luna"
+	respModel := "gpt-6-luna-2026"
+	mismatch := true
+	chain := "gpt-6.1-sol→gpt-6-luna"
+	rate := 1.5
+	log := &service.UsageLog{
+		ID:                    7,
+		UserID:                11,
+		AccountID:             99,
+		RequestID:             "req_map",
+		Model:                 "gpt-6-luna",
+		RequestedModel:        "gpt-6.1-sol",
+		UpstreamModel:         &upstream,
+		UpstreamResponseModel: &respModel,
+		UpstreamModelMismatch: &mismatch,
+		ModelMappingChain:     &chain,
+		AccountRateMultiplier: &rate,
+		Account:               &service.Account{ID: 99, Name: "secret-account-name"},
+	}
+
+	userDTO := UsageLogFromService(log)
+	require.Equal(t, "gpt-6.1-sol", userDTO.Model)
+	require.Zero(t, userDTO.AccountID)
+
+	raw, err := json.Marshal(userDTO)
+	require.NoError(t, err)
+	body := string(raw)
+	for _, forbidden := range []string{
+		"upstream_model", "upstream_response_model", "upstream_model_mismatch", "model_mapping_chain",
+		"account_rate_multiplier", "account_id", "\"account\"", "secret-account-name", "gpt-6-luna", "channel_id",
+	} {
+		require.NotContains(t, body, forbidden, "user DTO leaked %s", forbidden)
+	}
+
+	// Site-admin DTO keeps everything.
+	adminRaw, err := json.Marshal(UsageLogFromServiceAdmin(log))
+	require.NoError(t, err)
+	adminBody := string(adminRaw)
+	for _, expected := range []string{
+		`"upstream_model":"gpt-6-luna"`, `"upstream_response_model":"gpt-6-luna-2026"`,
+		`"upstream_model_mismatch":true`, `"model_mapping_chain":"gpt-6.1-sol→gpt-6-luna"`,
+		`"account_id":99`, `"model":"gpt-6.1-sol"`,
+	} {
+		require.Contains(t, adminBody, expected)
+	}
+}

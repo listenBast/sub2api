@@ -420,6 +420,47 @@ describe('admin UsageTable tooltip', () => {
     expect(text).toContain('claude-sonnet-4-20250514')
   })
 
+  it('never renders upstream model, mapping chain or response-model audit when showModelMapping is false (user view)', () => {
+    const row = {
+      request_id: 'req-user-model-1',
+      model: 'gpt-6.1-sol',
+      upstream_model: 'gpt-6-luna',
+      model_mapping_chain: 'gpt-6.1-sol→gpt-6-luna',
+      upstream_response_model: 'gpt-6-luna-2026',
+      upstream_model_mismatch: true,
+      actual_cost: 0,
+      total_cost: 0,
+      rate_multiplier: 1,
+      input_cost: 0,
+      output_cost: 0,
+      cache_creation_cost: 0,
+      cache_read_cost: 0,
+      input_tokens: 0,
+      output_tokens: 0,
+    }
+
+    const mountTable = (showModelMapping?: boolean) => mount(UsageTable, {
+      props: {
+        data: [row],
+        loading: false,
+        columns: [],
+        ...(showModelMapping === undefined ? {} : { showModelMapping }),
+      },
+      global: {
+        stubs: { DataTable: DataTableStub, EmptyState: true, Icon: true, Teleport: true },
+      },
+    })
+
+    const userText = mountTable(false).text()
+    expect(userText).toContain('gpt-6.1-sol')
+    expect(userText).not.toContain('gpt-6-luna')
+    expect(userText).not.toContain('usage.modelMismatch')
+
+    // admin default keeps showing everything
+    const adminText = mountTable().text()
+    expect(adminText).toContain('gpt-6-luna')
+  })
+
   it('shows requested and forwarded reasoning effort separately when they differ', () => {
     const wrapper = mount(UsageTable, {
       props: {
