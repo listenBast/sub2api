@@ -116,7 +116,7 @@ func scrubModelNameWithReplacement(text, model, replacement string) string {
 	for {
 		i := strings.Index(rest, model)
 		if i < 0 {
-			b.WriteString(rest)
+			_, _ = b.WriteString(rest)
 			break
 		}
 		abs := consumed + i
@@ -124,11 +124,11 @@ func scrubModelNameWithReplacement(text, model, replacement string) string {
 		beforeOK := abs == 0 || !isModelNameChar(text[abs-1]) || strings.HasSuffix(text[:abs], "models/")
 		afterOK := end >= len(rest) || !isModelNameChar(rest[end]) ||
 			(rest[end] == '.' && (end+1 >= len(rest) || !isModelNameChar(rest[end+1])))
-		b.WriteString(rest[:i])
+		_, _ = b.WriteString(rest[:i])
 		if beforeOK && afterOK {
-			b.WriteString(replacement)
+			_, _ = b.WriteString(replacement)
 		} else {
-			b.WriteString(model)
+			_, _ = b.WriteString(model)
 		}
 		rest = rest[end:]
 		consumed += end
