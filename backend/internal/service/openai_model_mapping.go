@@ -1,6 +1,10 @@
 package service
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/Wei-Shaw/sub2api/internal/pkg/apicompat"
+)
 
 // resolveOpenAIForwardModel 解析 OpenAI 兼容转发使用的模型。
 // messagesDispatchMappedModel 是调用方已为 /v1/messages 解析的显式调度结果；
@@ -136,4 +140,61 @@ func resolveOpenAICompactForwardModel(account *Account, model string) string {
 		return trimmedMapped
 	}
 	return trimmedModel
+}
+
+// openAIClientBillingModel 返回 OpenAI 兼容链路的"计费模型"：客户端请求的模型
+// （账号级 model_mapping 之前），而不是账号映射后的实际转发模型。
+//
+// 背景：各转发入口把 billingModel 设为 resolveOpenAIForwardModel 的结果（账号映射
+// 后的模型）并写入 OpenAIForwardResult.BillingModel。运营者在账号上配置映射
+// （如 gpt-6.1-sol → gpt-6-luna）只是为了换上游账号/规避上游限制，对用户而言
+// 扣费应当仍按其请求的模型计。这里在 RecordUsage 汇聚点统一还原：
+//   - BillingModel 为空：沿用 result.Model（请求模型）；
+//   - BillingModel 恰好是账号映射对请求模型的映射结果：还原为映射前的模型
+//     （messages 链路映射前模型是经过兼容归一化的名字，同时尝试归一化形式）；
+//   - 其它情况（图片/视频/媒体的专用计费模型、messages 分组调度映射等显式设定）
+//     原样保留——它们不是账号映射。
+//
+// 渠道级映射/计费来源（BillingModelSource）仍在调用方之后叠加，行为不变。
+// 返回的 fallbacks 是后续兜底候选（请求原名、归一化名），用于请求模型无价时回退。
+func openAIClientBillingModel(account *Account, result *OpenAIForwardResult) (billingModel string, fallbacks []string) {
+	if result == nil {
+		return "", nil
+	}
+	requested := strings.TrimSpace(result.Model)
+	explicit := strings.TrimSpace(result.BillingModel)
+	if explicit == "" {
+		return forwardResultBillingModel(result.Model, result.UpstreamModel), nil
+	}
+	if account == nil || requested == "" || strings.EqualFold(explicit, requested) {
+		return explicit, nil
+	}
+	mapping := account.GetModelMapping()
+	if len(mapping) == 0 {
+		return explicit, nil
+	}
+	candidates := make([]string, 0, 2)
+	if normalized := openAICompatNormalizedModelName(requested); normalized != "" && normalized != requested {
+		candidates = append(candidates, normalized)
+	}
+	candidates = append(candidates, requested)
+	for _, candidate := range candidates {
+		mapped, matched := resolveRequestedModelInMapping(mapping, candidate)
+		if !matched {
+			if normalized := normalizeRequestedModelForLookup(account.Platform, candidate); normalized != candidate {
+				mapped, matched = resolveRequestedModelInMapping(mapping, normalized)
+			}
+		}
+		if matched && strings.EqualFold(strings.TrimSpace(mapped), explicit) {
+			return candidate, candidates
+		}
+	}
+	return explicit, nil
+}
+
+// openAICompatNormalizedModelName 返回 /v1/messages 兼容链路对请求模型名做的归一化结果。
+func openAICompatNormalizedModelName(model string) string {
+	req := &apicompat.AnthropicRequest{Model: model}
+	applyOpenAICompatModelNormalization(req)
+	return strings.TrimSpace(req.Model)
 }

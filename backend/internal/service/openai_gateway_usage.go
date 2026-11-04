@@ -213,8 +213,11 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 	videoMultiplier := resolveVideoRateMultiplier(apiKey, baseMultiplier)
 
 	var cost *CostBreakdown
-	billingModel := forwardResultBillingModel(result.Model, result.UpstreamModel)
-	if result.BillingModel != "" {
+	// 默认按「客户端请求的模型」计费：账号级 model_mapping 只改变实际转发模型，
+	// 不改变用户的计费口径（见 openAIClientBillingModel）。
+	billingModel, billingModelFallbacks := openAIClientBillingModel(account, result)
+	// 渠道显式选择 upstream 计费来源：保持"按实际转发（账号映射后）模型计费"。
+	if input.BillingModelSource == BillingModelSourceUpstream && strings.TrimSpace(result.BillingModel) != "" {
 		billingModel = strings.TrimSpace(result.BillingModel)
 	}
 	if input.BillingModelSource == BillingModelSourceChannelMapped && input.ChannelMappedModel != "" && input.ChannelMappedModel != input.OriginalModel {
@@ -223,13 +226,17 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 	if input.BillingModelSource == BillingModelSourceRequested && input.OriginalModel != "" {
 		billingModel = input.OriginalModel
 	}
+	// 候选顺序：请求模型（含归一化/原名）优先，其后才是账号映射后的实际模型：
+	// 请求模型无价时回退到实际转发模型，保证不会因映射目标有价而请求名无价就落 $0。
 	billingModels := usageBillingModelCandidates(
 		billingModel,
-		result.BillingModel,
-		input.ChannelMappedModel,
-		input.OriginalModel,
-		result.UpstreamModel,
-		result.Model,
+		append(append([]string{}, billingModelFallbacks...),
+			input.OriginalModel,
+			result.Model,
+			result.BillingModel,
+			input.ChannelMappedModel,
+			result.UpstreamModel,
+		)...,
 	)
 	billingModels = s.filterCNProviderBillingModelCandidates(ctx, account, apiKey, billingModels)
 	serviceTier := ""
@@ -633,11 +640,13 @@ func (s *OpenAIGatewayService) calculateOpenAIRecordUsageCost(
 	var tokenCost *CostBreakdown
 	var lastErr error
 	if len(billingModels) > 0 && billingModel != "" {
+		attempted := 0
 		for _, candidate := range billingModels {
 			candidate = strings.TrimSpace(candidate)
 			if candidate == "" {
 				continue
 			}
+			attempted++
 			cost, err := s.calculateOpenAIRecordUsageTokenCost(
 				ctx,
 				apiKey,
@@ -652,6 +661,17 @@ func (s *OpenAIGatewayService) calculateOpenAIRecordUsageCost(
 			)
 			if err == nil {
 				tokenCost = cost
+				if attempted > 1 {
+					// 首选计费模型（默认=客户端请求模型）无价，回退到后续候选。
+					logger.L().Warn("openai_usage.billing_model_fallback",
+						zap.String("preferred_model", strings.TrimSpace(billingModels[0])),
+						zap.String("billed_model", candidate),
+						zap.String("requested_model", strings.TrimSpace(result.Model)),
+						zap.String("upstream_model", strings.TrimSpace(result.UpstreamModel)),
+						zap.Int64("api_key_id", apiKey.ID),
+						zap.Error(lastErr),
+					)
+				}
 				break
 			}
 			lastErr = err

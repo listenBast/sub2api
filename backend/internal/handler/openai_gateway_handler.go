@@ -136,11 +136,16 @@ func openAIWSTurnBillingModel(result *service.OpenAIForwardResult, mapping servi
 	if result != nil {
 		billingModel = strings.TrimSpace(result.BillingModel)
 	}
-	if billingModel == "" {
+	// 默认按客户端请求的模型计费（账号级 model_mapping 不改变计费口径）；
+	// 仅当渠道显式选择 upstream 计费来源时才按实际转发模型计费。
+	if billingModel == "" && mapping.BillingModelSource == service.BillingModelSourceUpstream {
 		billingModel = strings.TrimSpace(upstreamModel)
 	}
 	if billingModel == "" {
 		billingModel = strings.TrimSpace(requestedModel)
+	}
+	if billingModel == "" {
+		billingModel = strings.TrimSpace(upstreamModel)
 	}
 
 	requestedModel = strings.TrimSpace(requestedModel)

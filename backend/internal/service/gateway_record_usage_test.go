@@ -825,3 +825,31 @@ func TestGatewayServiceRecordUsage_FastSpeedHonouredKeepsPremium(t *testing.T) {
 	require.NoError(t, err)
 	require.InDelta(t, fastCost.TotalCost, usageRepo.lastLog.TotalCost, 1e-10)
 }
+
+// 账号级 model_mapping 不改变计费：按客户端请求模型计费，而非实际转发的映射后模型。
+func TestGatewayServiceRecordUsage_BillsRequestedModelNotAccountMappedModel(t *testing.T) {
+	usageRepo := &openAIRecordUsageLogRepoStub{inserted: true}
+	userRepo := &openAIRecordUsageUserRepoStub{}
+	svc := newGatewayRecordUsageServiceForTest(usageRepo, userRepo, &openAIRecordUsageSubRepoStub{})
+	tokens := UsageTokens{InputTokens: 100, OutputTokens: 50}
+	requestedCost, err := svc.billingService.CalculateCost("claude-sonnet-4-20250514", tokens, 1)
+	require.NoError(t, err)
+	mappedCost, err := svc.billingService.CalculateCost("claude-opus-4-20250514", tokens, 1)
+	require.NoError(t, err)
+	require.NotEqual(t, requestedCost.TotalCost, mappedCost.TotalCost)
+
+	err = svc.RecordUsage(context.Background(), &RecordUsageInput{
+		Result: &ForwardResult{
+			RequestID:     "gateway_requested_billing",
+			Usage:         ClaudeUsage{InputTokens: 100, OutputTokens: 50},
+			Model:         "claude-sonnet-4-20250514",
+			UpstreamModel: "claude-opus-4-20250514",
+			Duration:      time.Second,
+		},
+		APIKey:  &APIKey{ID: 501, Quota: 100},
+		User:    &User{ID: 601},
+		Account: &Account{ID: 701},
+	})
+	require.NoError(t, err)
+	require.InDelta(t, requestedCost.TotalCost, usageRepo.lastLog.TotalCost, 1e-12)
+}

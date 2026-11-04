@@ -1692,6 +1692,20 @@ func TestOpenAIWSTurnBillingModelPreservesImagePricingModel(t *testing.T) {
 			upstreamModel:    "gpt-5.6-sol",
 			wantBillingModel: "gpt-5.6-sol",
 		},
+		{
+			name:             "text turn bills requested model by default",
+			mapping:          service.ChannelMappingResult{},
+			requestedModel:   "public-alias",
+			upstreamModel:    "gpt-5.6-sol",
+			wantBillingModel: "public-alias",
+		},
+		{
+			name:             "text turn bills requested model for channel_mapped without channel mapping",
+			mapping:          service.ChannelMappingResult{MappedModel: "public-alias", BillingModelSource: service.BillingModelSourceChannelMapped},
+			requestedModel:   "public-alias",
+			upstreamModel:    "gpt-5.6-sol",
+			wantBillingModel: "public-alias",
+		},
 	}
 
 	for _, tt := range tests {
