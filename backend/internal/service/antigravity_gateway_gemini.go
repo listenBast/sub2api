@@ -100,6 +100,7 @@ func (s *AntigravityGatewayService) ForwardGemini(ctx context.Context, c *gin.Co
 		return nil, s.writeGoogleError(c, http.StatusBadRequest, ImageGenerationPermissionMessage())
 	}
 	forwardedModel := mappedModel
+	setAnthropicPublicModel(c, originalModel, mappedModel)
 
 	// 获取 access_token
 	if s.tokenProvider == nil {

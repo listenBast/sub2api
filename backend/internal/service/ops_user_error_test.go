@@ -182,3 +182,30 @@ func TestToUserErrorRequestDetail_Nil(t *testing.T) {
 		t.Errorf("expected nil for nil input, got %+v", out)
 	}
 }
+
+func TestToUserErrorRequest_ScrubsUpstreamModelName(t *testing.T) {
+	e := &OpsErrorLog{
+		RequestedModel: "gpt-6.1-sol",
+		UpstreamModel:  "gpt-6-luna",
+		Message:        "The model gpt-6-luna is overloaded",
+	}
+	got := ToUserErrorRequest(e)
+	if got.Model != "gpt-6.1-sol" {
+		t.Fatalf("model = %q", got.Model)
+	}
+	if strings.Contains(got.Message, "gpt-6-luna") || !strings.Contains(got.Message, "gpt-6.1-sol") {
+		t.Fatalf("message leaked upstream model: %q", got.Message)
+	}
+
+	detail := ToUserErrorRequestDetail(&OpsErrorLogDetail{
+		OpsErrorLog: *e,
+		ErrorBody:   `{"error":{"message":"model gpt-6-luna rejected"}}`,
+	})
+	if strings.Contains(detail.ErrorBody, "gpt-6-luna") || strings.Contains(detail.Message, "gpt-6-luna") {
+		t.Fatalf("detail leaked upstream model: %+v", detail)
+	}
+	raw, _ := json.Marshal(detail)
+	if strings.Contains(string(raw), "upstream_model") || strings.Contains(string(raw), "account") {
+		t.Fatalf("user detail JSON exposes internal fields: %s", raw)
+	}
+}

@@ -72,6 +72,7 @@ func (s *GatewayService) forwardBedrock(
 	if !ok {
 		return nil, fmt.Errorf("unsupported bedrock model: %s", reqModel)
 	}
+	setAnthropicPublicModel(c, reqModel, mappedModel)
 	if mappedModel != reqModel {
 		logger.LegacyPrintf("service.gateway", "[Bedrock] Model mapping: %s -> %s (account: %s)", reqModel, mappedModel, account.Name)
 	}
@@ -398,6 +399,7 @@ func (s *GatewayService) handleBedrockNonStreamingResponse(
 	// 转换 Bedrock 特有的 amazon-bedrock-invocationMetrics 为标准 Anthropic usage 格式
 	// 并移除该字段避免透传给客户端
 	body = transformBedrockInvocationMetrics(body)
+	body = rewriteAnthropicBodyModel(body, anthropicPublicModel(c))
 
 	usage := parseClaudeUsageFromResponseBody(body)
 

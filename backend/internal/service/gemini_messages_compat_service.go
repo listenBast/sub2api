@@ -1130,6 +1130,8 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 	if action != "countTokens" && geminiImageGenerationDenied(c, body, originalModel, mappedModel) {
 		return nil, s.writeGoogleError(c, http.StatusBadRequest, ImageGenerationPermissionMessage())
 	}
+	// Keep the account-mapped model out of client-visible modelVersion fields.
+	setAnthropicPublicModel(c, originalModel, mappedModel)
 
 	proxyURL := ""
 	if account.ProxyID != nil && account.Proxy != nil {
@@ -1577,7 +1579,7 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 			b, _ := json.Marshal(collected)
 			upstreamResponseModelObserverFromContext(c).ObserveGemini(b)
 			observeGeminiImageOutputs(c, b)
-			c.Data(http.StatusOK, "application/json", b)
+			c.Data(http.StatusOK, "application/json", rewriteGeminiBodyModelVersion(b, anthropicPublicModel(c)))
 			usage = usageObj
 		} else {
 			usageResp, err := s.handleNativeNonStreamingResponse(c, resp, isOAuth, account, requestID)
@@ -2870,7 +2872,7 @@ func (s *GeminiMessagesCompatService) handleNativeNonStreamingResponse(c *gin.Co
 	if contentType == "" {
 		contentType = "application/json"
 	}
-	c.Data(resp.StatusCode, contentType, respBody)
+	c.Data(resp.StatusCode, contentType, rewriteGeminiBodyModelVersion(respBody, anthropicPublicModel(c)))
 
 	if u := extractGeminiUsage(respBody); u != nil {
 		return u, nil
@@ -2922,6 +2924,7 @@ func (s *GeminiMessagesCompatService) handleNativeStreamingResponse(c *gin.Conte
 	clientDisconnect := false
 	finished := false
 
+	publicModel := anthropicPublicModel(c)
 	for {
 		line, err := reader.ReadString('\n')
 		// 读错误时 line 是未以换行结尾的残行，不透传也不参与用量统计；EOF 时的末行完整有效。
@@ -2967,9 +2970,12 @@ func (s *GeminiMessagesCompatService) handleNativeStreamingResponse(c *gin.Conte
 						firstTokenMs = &ms
 					}
 
+					rewrittenToWrite := rewriteGeminiBodyModelVersion([]byte(rawToWrite), publicModel)
 					if isOAuth {
 						// SSE format requires double newline (\n\n) to separate events
-						_, _ = fmt.Fprintf(c.Writer, "data: %s\n\n", rawToWrite)
+						_, _ = fmt.Fprintf(c.Writer, "data: %s\n\n", rewrittenToWrite)
+					} else if string(rewrittenToWrite) != rawToWrite {
+						_, _ = io.WriteString(c.Writer, "data: "+string(rewrittenToWrite)+line[len(trimmed):])
 					} else {
 						// Pass-through for AI Studio responses.
 						_, _ = io.WriteString(c.Writer, line)
