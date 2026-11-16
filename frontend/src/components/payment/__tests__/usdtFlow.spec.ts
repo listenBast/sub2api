@@ -27,7 +27,8 @@ describe('USDT hosted checkout', () => {
   it('has no default financial policy or receiving addresses', () => {
     const fields = PROVIDER_CONFIG_FIELDS.bepusdt
     expect(fields.filter(field => field.key.endsWith('Address'))).toHaveLength(4)
-    for (const field of fields) expect(field.defaultValue).toBeUndefined()
+    for (const field of fields.filter(field => field.key !== 'rateMode')) expect(field.defaultValue).toBeUndefined()
+    expect(fields.find(field => field.key === 'rateMode')?.defaultValue).toBe('fixed')
     expect(fields.find(field => field.key === 'apiToken')?.sensitive).toBe(true)
   })
 })

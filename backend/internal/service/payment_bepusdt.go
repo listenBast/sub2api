@@ -70,10 +70,14 @@ func validateBEpusdtPayment(o *dbent.PaymentOrder, trade string, metadata map[st
 // Never expose the entire provider snapshot (instance identity/config) to clients.
 // The QR payload is Address only; it does not encode a wallet URI, chain or amount.
 type CryptoPaymentDetails struct {
-	Method  string `json:"method"`
-	Asset   string `json:"asset"`
-	Address string `json:"address"`
-	Amount  string `json:"amount"`
+	Method        string `json:"method"`
+	Asset         string `json:"asset"`
+	Address       string `json:"address"`
+	Amount        string `json:"amount"`
+	Rate          string `json:"rate,omitempty"`
+	RateSource    string `json:"rate_source,omitempty"`
+	RateQuotedAt  string `json:"rate_quoted_at,omitempty"`
+	RateFetchedAt string `json:"rate_fetched_at,omitempty"`
 }
 
 // PaymentOrderCryptoDetails reads creation-time data, never today's configured wallet.
@@ -91,5 +95,5 @@ func PaymentOrderCryptoDetails(order *dbent.PaymentOrder) *CryptoPaymentDetails 
 	if err != nil || !value.IsPositive() {
 		return nil
 	}
-	return &CryptoPaymentDetails{Method: method, Asset: "USDT", Address: address, Amount: value.String()}
+	return &CryptoPaymentDetails{Method: method, Asset: "USDT", Address: address, Amount: value.String(), Rate: psSnapshotStringValue(order.ProviderSnapshot["bepusdt_rate"]), RateSource: psSnapshotStringValue(order.ProviderSnapshot["bepusdt_rate_source"]), RateQuotedAt: psSnapshotStringValue(order.ProviderSnapshot["bepusdt_rate_quoted_at"]), RateFetchedAt: psSnapshotStringValue(order.ProviderSnapshot["bepusdt_rate_fetched_at"])}
 }

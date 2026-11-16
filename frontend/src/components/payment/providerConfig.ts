@@ -131,6 +131,7 @@ export const PROVIDER_CONFIG_FIELDS: Record<string, ConfigFieldDef[]> = {
   bepusdt: [
     { key: 'apiBase', label: '', sensitive: false },
     { key: 'apiToken', label: '', sensitive: true },
+    { key: 'rateMode', label: '', sensitive: false, defaultValue: 'fixed', options: [{ value: 'fixed', label: 'admin.settings.payment.usdtRateFixed' }, { value: 'coingecko', label: 'admin.settings.payment.usdtRateAuto' }] },
     { key: 'rate', label: '', sensitive: false, hintKey: 'admin.settings.payment.usdtRateHint' },
     { key: 'minimumAmount', label: '', sensitive: false },
     { key: 'exactMatchConfirmed', label: '', sensitive: false, options: [{ value: 'yes', label: 'admin.settings.payment.usdtExactMatchYes' }] },

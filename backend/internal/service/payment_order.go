@@ -105,6 +105,15 @@ func (s *PaymentService) CreateOrder(ctx context.Context, req CreateOrderRequest
 	if oauthResp != nil {
 		return oauthResp, nil
 	}
+	if sel != nil && sel.ProviderKey == payment.TypeBEpusdt {
+		quoteConfig, e := provider.PrepareBEpusdtRate(ctx, sel.Config)
+		if e != nil {
+			return nil, infraerrors.ServiceUnavailable("USDT_RATE_UNAVAILABLE", "CoinGecko quote unavailable or expired; new USDT orders paused")
+		}
+		copySelection := *sel
+		copySelection.Config = quoteConfig
+		sel = &copySelection
+	}
 	order, err := s.createOrderInTx(ctx, req, user, plan, cfg, orderAmount, limitAmount, feeRate, payAmount, bonusAmount, sel)
 	if err != nil {
 		return nil, err
@@ -288,6 +297,18 @@ func buildPaymentOrderProviderSnapshot(sel *payment.InstanceSelection, req Creat
 		snapshot["payment_mode"] = paymentMode
 	}
 
+	if providerKey == payment.TypeBEpusdt {
+		rate := sel.Config["rate"]
+		source := "fixed"
+		if sel.Config["rateMode"] == "coingecko" {
+			rate = sel.Config["lockedRate"]
+			source = "coingecko"
+		}
+		snapshot["bepusdt_rate"] = rate
+		snapshot["bepusdt_rate_source"] = source
+		snapshot["bepusdt_rate_quoted_at"] = sel.Config["rateQuotedAt"]
+		snapshot["bepusdt_rate_fetched_at"] = sel.Config["rateFetchedAt"]
+	}
 	if providerKey == payment.TypeWxpay {
 		if merchantAppID := paymentOrderSnapshotWxpayAppID(sel, req); merchantAppID != "" {
 			snapshot["merchant_app_id"] = merchantAppID

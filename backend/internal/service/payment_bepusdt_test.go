@@ -47,6 +47,8 @@ func TestBEpusdtAdminConfigPersistenceAndAddressRotation(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, next, config["usdt_bep20Address"])
 	require.Equal(t, cfg["apiToken"], config["apiToken"])
+	_, err = svc.UpdateProviderInstance(ctx, inst.ID, UpdateProviderInstanceRequest{Config: map[string]string{"rateMode": "coingecko"}})
+	require.ErrorContains(t, err, "pending orders")
 	_, err = svc.UpdateProviderInstance(ctx, inst.ID, UpdateProviderInstanceRequest{Config: map[string]string{"apiBase": "https://different.example"}})
 	require.ErrorContains(t, err, "pending orders")
 	for _, bad := range []map[string]string{{"usdt_bep20Address": "not-an-address"}, {"usdt_bep20Address": ""}, {"rate": ""}, {"minimumAmount": ""}} {
@@ -152,4 +154,25 @@ func TestBEpusdtCheckoutDetailsUseImmutableSnapshot(t *testing.T) {
 	o.PaymentType = "usdt_bep20"
 	o.ProviderKey = nil
 	require.Nil(t, PaymentOrderCryptoDetails(o))
+}
+
+func TestBEpusdtAutomaticConfigAndQuoteSnapshot(t *testing.T) {
+	ctx := context.Background()
+	client := newPaymentConfigServiceTestClient(t)
+	svc := &PaymentConfigService{entClient: client}
+	cfg := bepusdtTestConfig()
+	delete(cfg, "rate")
+	cfg["rateMode"] = "coingecko"
+	_, err := svc.CreateProviderInstance(ctx, CreateProviderInstanceRequest{ProviderKey: payment.TypeBEpusdt, Name: "Auto USDT", Config: cfg, SupportedTypes: []string{"usdt_bep20"}, Enabled: true})
+	require.NoError(t, err)
+	cfg["lockedRate"] = "6.6623951423103795"
+	cfg["rateSource"] = "coingecko"
+	cfg["rateQuotedAt"] = "2026-11-16T16:33:56Z"
+	cfg["rateFetchedAt"] = "2026-11-16T16:34:04Z"
+	snapshot := buildPaymentOrderProviderSnapshot(&payment.InstanceSelection{ProviderKey: payment.TypeBEpusdt, Config: cfg}, CreateOrderRequest{})
+	require.Equal(t, "6.6623951423103795", snapshot["bepusdt_rate"])
+	cfg["lockedRate"] = "7"
+	require.Equal(t, "6.6623951423103795", snapshot["bepusdt_rate"])
+	require.Equal(t, "coingecko", snapshot["bepusdt_rate_source"])
+	require.NotContains(t, snapshot, "apiToken")
 }

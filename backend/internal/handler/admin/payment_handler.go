@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"github.com/Wei-Shaw/sub2api/internal/payment/provider"
 	"strconv"
 	"time"
 
@@ -502,4 +503,14 @@ func (h *PaymentHandler) UpdateConfig(c *gin.Context) {
 		return
 	}
 	response.Success(c, gin.H{"message": "updated"})
+}
+
+// GetUSDTRate exposes only public quote metadata, never provider credentials.
+func (h *PaymentHandler) GetUSDTRate(c *gin.Context) {
+	q, err := provider.GetBEpusdtRate(c.Request.Context())
+	if err != nil {
+		response.Success(c, gin.H{"available": false, "source": "coingecko", "cache_seconds": 30, "max_age_seconds": 120})
+		return
+	}
+	response.Success(c, gin.H{"available": true, "quote": q, "cache_seconds": 30, "max_age_seconds": 120})
 }

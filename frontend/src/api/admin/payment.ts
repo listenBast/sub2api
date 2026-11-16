@@ -172,6 +172,10 @@ export const adminPaymentAPI = {
   // ==================== Provider Instances ====================
 
   /** Get all provider instances */
+  getUSDTRate() {
+    return apiClient.get<{ available: boolean; quote?: { rate: string; quoted_at: string; fetched_at: string }; cache_seconds: number; max_age_seconds: number }>('/admin/payment/providers/usdt-rate')
+  },
+
   getProviders() {
     return apiClient.get<ProviderInstance[]>('/admin/payment/providers')
   },

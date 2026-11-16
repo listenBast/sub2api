@@ -83,7 +83,7 @@ func bepusdtPositive(raw string) (decimal.Decimal, error) {
 	return d, nil
 }
 func NewBEpusdt(id string, config map[string]string) (*BEpusdt, error) {
-	for _, key := range []string{"apiBase", "apiToken", "notifyUrl", "returnUrl", "rate", "minimumAmount"} {
+	for _, key := range []string{"apiBase", "apiToken", "notifyUrl", "returnUrl", "minimumAmount"} {
 		if strings.TrimSpace(config[key]) == "" {
 			return nil, fmt.Errorf("bepusdt config missing required key: %s", key)
 		}
@@ -99,7 +99,14 @@ func NewBEpusdt(id string, config map[string]string) (*BEpusdt, error) {
 		}
 		cfg[key] = strings.TrimRight(cfg[key], "/")
 	}
-	for _, key := range []string{"rate", "minimumAmount"} {
+	if cfg["rateMode"] != "" && cfg["rateMode"] != "fixed" && cfg["rateMode"] != "coingecko" {
+		return nil, fmt.Errorf("bepusdt invalid rate mode")
+	}
+	keys := []string{"minimumAmount"}
+	if cfg["rateMode"] != "coingecko" {
+		keys = append(keys, "rate")
+	}
+	for _, key := range keys {
 		if _, err := bepusdtPositive(cfg[key]); err != nil {
 			return nil, fmt.Errorf("bepusdt %s must be an explicit positive decimal", key)
 		}
@@ -230,9 +237,17 @@ func (b *BEpusdt) CreatePayment(ctx context.Context, req payment.CreatePaymentRe
 		redirect = b.config["returnUrl"]
 	}
 	requestedAt := time.Now()
+	rate := b.config["rate"]
+	if b.config["rateMode"] == "coingecko" {
+		rate = b.config["lockedRate"]
+		quoted, e := time.Parse(time.RFC3339, b.config["rateQuotedAt"])
+		if _, err := bepusdtPositive(rate); err != nil || e != nil || !validQuoteTime(time.Now(), quoted) || b.config["rateSource"] != "coingecko" {
+			return nil, fmt.Errorf("USDT_RATE_UNAVAILABLE: missing or expired locked CoinGecko quote")
+		}
+	}
 	data, err := b.post(ctx, "/api/v1/order/create-transaction", map[string]any{
 		"order_id": req.OrderID, "amount": json.Number(amount.String()), "fiat": "CNY", "trade_type": chain,
-		"address": address, "rate": b.config["rate"], "notify_url": b.config["notifyUrl"], "redirect_url": redirect, "timeout": seconds,
+		"address": address, "rate": rate, "notify_url": b.config["notifyUrl"], "redirect_url": redirect, "timeout": seconds,
 	}, true)
 	if err != nil {
 		return nil, err
@@ -251,6 +266,13 @@ func (b *BEpusdt) CreatePayment(ctx context.Context, req payment.CreatePaymentRe
 		return nil, fmt.Errorf("bepusdt invalid cashier URL")
 	}
 	metadata := b.MerchantIdentityMetadata()
+	metadata["bepusdt_rate"] = rate
+	metadata["bepusdt_rate_source"] = "fixed"
+	if b.config["rateMode"] == "coingecko" {
+		metadata["bepusdt_rate_source"] = "coingecko"
+		metadata["bepusdt_rate_quoted_at"] = b.config["rateQuotedAt"]
+		metadata["bepusdt_rate_fetched_at"] = b.config["rateFetchedAt"]
+	}
 	metadata["bepusdt_trade_id"] = data.TradeID
 	metadata["bepusdt_order_id"] = req.OrderID
 	metadata["bepusdt_method"] = req.PaymentType
