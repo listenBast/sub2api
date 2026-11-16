@@ -296,11 +296,6 @@ func (b *BEpusdt) ConfirmNotification(ctx context.Context, n *payment.PaymentNot
 	if err != nil {
 		return err
 	}
-	amount, e := bepusdtPositive(easyPayJSONScalar(d.Money))
-	actual, ae := bepusdtPositive(easyPayJSONScalar(d.Actual))
-	if d.OrderID != n.OrderID || d.Status != 2 || d.Fiat != "CNY" || e != nil || ae != nil || amount.String() != n.Metadata["bepusdt_amount"] || actual.String() != n.Metadata["bepusdt_actual_amount"] || !bepusdtSameAddress(n.Metadata["bepusdt_method"], d.Token, n.Metadata["bepusdt_address"]) {
-		return fmt.Errorf("bepusdt confirmation mismatch")
-	}
 	method := ""
 	for k, v := range BEpusdtChains {
 		if v == d.TradeType {
@@ -309,6 +304,13 @@ func (b *BEpusdt) ConfirmNotification(ctx context.Context, n *payment.PaymentNot
 	}
 	if method == "" {
 		return fmt.Errorf("bepusdt confirmation currency/chain mismatch")
+	}
+	// The signed native callback has no chain field. Bind the queried chain
+	// before address comparison so TRON never inherits EVM case folding.
+	amount, e := bepusdtPositive(easyPayJSONScalar(d.Money))
+	actual, ae := bepusdtPositive(easyPayJSONScalar(d.Actual))
+	if d.OrderID != n.OrderID || d.Status != 2 || d.Fiat != "CNY" || e != nil || ae != nil || amount.String() != n.Metadata["bepusdt_amount"] || actual.String() != n.Metadata["bepusdt_actual_amount"] || !bepusdtSameAddress(method, d.Token, n.Metadata["bepusdt_address"]) {
+		return fmt.Errorf("bepusdt confirmation mismatch")
 	}
 	n.Metadata["bepusdt_method"] = method
 	return nil
@@ -345,8 +347,15 @@ func (b *BEpusdt) VerifyNotification(_ context.Context, raw string, _ map[string
 		case string:
 			p[key] = value
 		case json.Number:
+			// Bound work before expanding an unauthenticated exponent. A tiny
+			// JSON number such as 1e2147483647 must not allocate gigabytes in
+			// Decimal.String. Native USDT precision fits within the existing
+			// 40-character decimal limit, including scientific JSON notation.
+			if len(value.String()) > 40 {
+				return nil, fmt.Errorf("bepusdt invalid numeric field")
+			}
 			d, e := decimal.NewFromString(value.String())
-			if e != nil {
+			if e != nil || d.Exponent() < -38 || d.Exponent() > 38 {
 				return nil, fmt.Errorf("bepusdt invalid numeric field")
 			}
 			exact[key] = d.String()

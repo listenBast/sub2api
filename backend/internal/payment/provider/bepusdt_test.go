@@ -251,3 +251,64 @@ func TestBEpusdtCancelUsesSignedNativeAPI(t *testing.T) {
 	_, err := b.Refund(context.Background(), payment.RefundRequest{TradeNo: "trade-1", Amount: "1"})
 	require.ErrorContains(t, err, "not supported")
 }
+
+// TRON base58 addresses are case-sensitive; EVM hex addresses are not.
+// The callback intentionally has no method until the same-instance query binds it.
+func TestBEpusdtConfirmationUsesNetworkAddressCaseRules(t *testing.T) {
+	const tronAddress = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"
+	const evmAddress = "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd"
+	cases := []struct {
+		name, method, address, queryAddress string
+		reject                              bool
+	}{
+		{"tron-exact", "usdt_trc20", tronAddress, tronAddress, false},
+		{"tron-case-change", "usdt_trc20", tronAddress, strings.ToLower(tronAddress), true},
+		{"bsc-hex-case", "usdt_bep20", evmAddress, "0x" + strings.ToUpper(evmAddress[2:]), false},
+		{"polygon-hex-case", "usdt_polygon", evmAddress, "0x" + strings.ToUpper(evmAddress[2:]), false},
+		{"ethereum-hex-case", "usdt_erc20", evmAddress, "0x" + strings.ToUpper(evmAddress[2:]), false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			b := testBEpusdt(t, func(w http.ResponseWriter, r *http.Request) {
+				require.Equal(t, "/api/v1/pay/info", r.URL.Path)
+				require.NoError(t, json.NewEncoder(w).Encode(map[string]any{"status_code": 200, "data": map[string]any{
+					"trade_id": "trade-1", "order_id": "order-1", "money": "14.00", "actual_amount": "2",
+					"token": tc.queryAddress, "fiat": "CNY", "trade_type": BEpusdtChains[tc.method], "status": 2,
+				}}))
+			})
+			raw := paidBEpusdtRaw(t, b, func(p map[string]string) { p["token"] = tc.address })
+			n, err := b.VerifyNotification(context.Background(), raw, nil)
+			require.NoError(t, err)
+			require.NotContains(t, n.Metadata, "bepusdt_method")
+			err = b.ConfirmNotification(context.Background(), n)
+			if tc.reject {
+				require.ErrorContains(t, err, "confirmation mismatch")
+				require.NotContains(t, n.Metadata, "bepusdt_method")
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, tc.method, n.Metadata["bepusdt_method"])
+			}
+		})
+	}
+}
+
+func TestBEpusdtRejectsUnboundedCallbackNumbers(t *testing.T) {
+	b := testBEpusdt(t, func(http.ResponseWriter, *http.Request) { t.Error("unexpected query") })
+	for _, key := range []string{"amount", "actual_amount", "status", "order_id"} {
+		for _, value := range []string{"1e2147483647", "1e-2147483647", strings.Repeat("1", 41)} {
+			t.Run(key+"/"+value, func(t *testing.T) {
+				_, err := b.VerifyNotification(context.Background(), fmt.Sprintf(`{"%s":%s}`, key, value), nil)
+				require.ErrorContains(t, err, "invalid numeric field")
+			})
+		}
+	}
+}
+
+func TestBEpusdtScientificCallbackNumberRetainsExactAmount(t *testing.T) {
+	b := testBEpusdt(t, func(http.ResponseWriter, *http.Request) { t.Error("unexpected query") })
+	raw := paidBEpusdtRaw(t, b, func(p map[string]string) { p["actual_amount"] = "2e-18" })
+	raw = strings.Replace(raw, `"actual_amount":"2e-18"`, `"actual_amount":2e-18`, 1)
+	n, err := b.VerifyNotification(context.Background(), raw, nil)
+	require.NoError(t, err)
+	require.Equal(t, "0.000000000000000002", n.Metadata["bepusdt_actual_amount"])
+}
