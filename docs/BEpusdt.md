@@ -214,9 +214,11 @@ isolated instance/token per trust boundary. The native API is **not** the Epay
   address validation, enabled/disabled chips, address rotation with a pending
   order, cashier/QR, mobile return and result polling in a browser. Automated
   component tests do **not** replace this visual review.
-- Conduct separately approved low-value real settlement tests for every enabled
-  chain, exact amount, duplicate/retried callbacks, cancellation, expiry,
-  delayed callback, under/overpay, query outage and wrong-instance callbacks.
+- Conduct separately approved, exact-amount, low-value real settlement tests for
+  every enabled chain; verify duplicate notification delivery without sending
+  another transfer. Test cancellation, expiry, delayed callbacks, under/overpay,
+  query outages and wrong-instance callbacks with isolated mocks/sandboxes, not
+  deliberate abnormal real-money transfers.
 - Agree operational policies for late/short/excess payments and manual refunds,
   and choose rate, minimum, network fees and confirmation depths. None was
   chosen on the user's behalf. Only approved correct/exact/on-time payments
@@ -224,7 +226,7 @@ isolated instance/token per trust boundary. The native API is **not** the Epay
 
 ## Local UI preview
 
-From this worktree run `pnpm --dir frontend dev --host 0.0.0.0 --port 5173` and
+From this worktree run `pnpm --dir frontend dev --host 127.0.0.1 --port 5173` and
 use a **local/staging** backend only (`VITE_DEV_PROXY_TARGET=http://localhost:8080` / Vite proxy as configured
 in `frontend/vite.config.ts`). Open `/admin/settings` → Payment, or the recharge
 page. Use local test administrator credentials; do not connect this preview to
