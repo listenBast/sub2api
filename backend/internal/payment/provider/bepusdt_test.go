@@ -61,7 +61,9 @@ func TestBEpusdtCreateUsesConfiguredAddressAndChain(t *testing.T) {
 	})
 	result, err := b.CreatePayment(context.Background(), payment.CreatePaymentRequest{OrderID: "order-1", PaymentType: "usdt_bep20", Amount: "14.00", ExpiresAt: time.Now().Add(10 * time.Minute)})
 	require.NoError(t, err)
-	require.Equal(t, result.PayURL, result.QRCode)
+	require.Equal(t, testUSDTAddress, result.QRCode)
+	require.NotEqual(t, result.PayURL, result.QRCode)
+	require.WithinDuration(t, time.Now().Add(500*time.Second), result.ExpiresAt, 2*time.Second)
 	require.Equal(t, "2", result.VerificationMetadata["bepusdt_actual_amount"])
 	require.Equal(t, testUSDTAddress, result.VerificationMetadata["bepusdt_address"])
 	for _, method := range []string{"usdt_trc20", "usdt_polygon", "bogus"} {
@@ -190,6 +192,7 @@ func TestBEpusdtEveryNetworkUsesWebsiteAddress(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, address, result.VerificationMetadata["bepusdt_address"])
 			require.Equal(t, method, result.VerificationMetadata["bepusdt_method"])
+			require.Equal(t, address, result.QRCode)
 		})
 	}
 }

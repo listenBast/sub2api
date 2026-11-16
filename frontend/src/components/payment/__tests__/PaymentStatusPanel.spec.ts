@@ -36,6 +36,8 @@ vi.mock('@/api/payment', () => ({
   },
 }))
 
+vi.mock('@/composables/useClipboard', () => ({ useClipboard: () => ({ copyToClipboard: vi.fn() }) }))
+
 vi.mock('qrcode', () => ({
   default: {
     toCanvas,
@@ -71,6 +73,35 @@ describe('PaymentStatusPanel', () => {
 
   afterEach(() => {
     vi.useRealTimers()
+  })
+
+  it('does not render a generic address QR when exact USDT instructions are missing', async () => {
+    const wrapper = mount(PaymentStatusPanel, { props: {
+      orderId: 42, qrCode: '0x1111111111111111111111111111111111111111',
+      expiresAt: new Date(Date.now() + 600000).toISOString(), paymentType: 'usdt_bep20',
+    }, global: { stubs: { Icon: true } } })
+    await flushPromises()
+    expect(wrapper.get('[role="alert"]').text()).toBe('payment.usdtDetailsUnavailable')
+    expect(wrapper.find('canvas').exists()).toBe(false)
+    expect(toCanvas).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('hides USDT transfer instructions after deadline and keeps its shared countdown', async () => {
+    pollOrderStatus.mockResolvedValue({ ...orderFactory('PENDING'), payment_type: 'usdt_bep20' })
+    const address = '0x1111111111111111111111111111111111111111'
+    const wrapper = mount(PaymentStatusPanel, { props: {
+      orderId: 42, qrCode: address, expiresAt: new Date(Date.now() + 2000).toISOString(), paymentType: 'usdt_bep20',
+      cryptoPayment: { method: 'usdt_bep20', asset: 'USDT', address, amount: '2.000001' },
+    }, global: { stubs: { Icon: true } } })
+    await flushPromises()
+    expect(wrapper.find('[data-test="usdt-instructions"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('00:02')
+    await vi.advanceTimersByTimeAsync(2100)
+    expect(wrapper.find('[data-test="usdt-instructions"]').exists()).toBe(false)
+    expect(wrapper.emitted('settled')).toEqual([['expired']])
+    expect(wrapper.emitted('success')).toBeUndefined()
+    wrapper.unmount()
   })
 
   it('treats RECHARGING as a successful terminal state', async () => {

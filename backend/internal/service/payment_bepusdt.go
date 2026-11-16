@@ -9,6 +9,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/payment"
 	"github.com/Wei-Shaw/sub2api/internal/payment/provider"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
+	"github.com/shopspring/decimal"
 )
 
 func validateBEpusdtInstance(key, types string, config map[string]string, enabled, refunds bool) error {
@@ -63,4 +64,32 @@ func validateBEpusdtPayment(o *dbent.PaymentOrder, trade string, metadata map[st
 		return fmt.Errorf("bepusdt payment after cancellation/expiry requires manual review")
 	}
 	return nil
+}
+
+// CryptoPaymentDetails is an allowlist of nonsecret, immutable payment instructions.
+// Never expose the entire provider snapshot (instance identity/config) to clients.
+// The QR payload is Address only; it does not encode a wallet URI, chain or amount.
+type CryptoPaymentDetails struct {
+	Method  string `json:"method"`
+	Asset   string `json:"asset"`
+	Address string `json:"address"`
+	Amount  string `json:"amount"`
+}
+
+// PaymentOrderCryptoDetails reads creation-time data, never today's configured wallet.
+func PaymentOrderCryptoDetails(order *dbent.PaymentOrder) *CryptoPaymentDetails {
+	if order == nil || psStringValue(order.ProviderKey) != payment.TypeBEpusdt {
+		return nil
+	}
+	method := psSnapshotStringValue(order.ProviderSnapshot["bepusdt_method"])
+	address := psSnapshotStringValue(order.ProviderSnapshot["bepusdt_address"])
+	amount := psSnapshotStringValue(order.ProviderSnapshot["bepusdt_actual_amount"])
+	if method != order.PaymentType || !provider.ValidateBEpusdtAddress(method, address) {
+		return nil
+	}
+	value, err := decimal.NewFromString(amount)
+	if err != nil || !value.IsPositive() {
+		return nil
+	}
+	return &CryptoPaymentDetails{Method: method, Asset: "USDT", Address: address, Amount: value.String()}
 }

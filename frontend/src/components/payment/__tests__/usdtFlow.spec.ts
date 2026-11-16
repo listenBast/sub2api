@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import PaymentMethodSelector from '../PaymentMethodSelector.vue'
-import { buildCreateOrderPayload, decidePaymentLaunch } from '../paymentFlow'
+import { buildCreateOrderPayload, decidePaymentLaunch, readPaymentRecoverySnapshot } from '../paymentFlow'
 import { PROVIDER_CONFIG_FIELDS, PROVIDER_SUPPORTED_TYPES } from '../providerConfig'
 
 vi.mock('vue-i18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }))
@@ -29,5 +29,17 @@ describe('USDT hosted checkout', () => {
     expect(fields.filter(field => field.key.endsWith('Address'))).toHaveLength(4)
     for (const field of fields) expect(field.defaultValue).toBeUndefined()
     expect(fields.find(field => field.key === 'apiToken')?.sensitive).toBe(true)
+  })
+})
+
+describe('USDT exact instructions on mobile and recovery', () => {
+  it.each(PROVIDER_SUPPORTED_TYPES.bepusdt)('keeps %s instructions visible without auto-redirect', (method) => {
+    const crypto = { method, asset: 'USDT' as const, address: 'mock-receiving-address', amount: '1.234567890123456789' }
+    const result = decidePaymentLaunch({ order_id: 9, amount: 14, pay_amount: 14, pay_url: 'https://crypto.example/pay/trade', qr_code: crypto.address, crypto_payment: crypto, expires_at: new Date(Date.now() + 600000).toISOString() }, { visibleMethod: method, orderType: 'balance', isMobile: true })
+    expect(result.kind).toBe('qr_waiting')
+    expect(result.paymentState.cryptoPayment).toEqual(crypto)
+    expect(readPaymentRecoverySnapshot(JSON.stringify(result.recovery))?.cryptoPayment?.amount).toBe(crypto.amount)
+    expect(readPaymentRecoverySnapshot(JSON.stringify({ ...result.recovery, cryptoPayment: { ...crypto, amount: 1.23 } }))).toBeNull()
+    expect(readPaymentRecoverySnapshot(JSON.stringify({ ...result.recovery, cryptoPayment: { ...crypto, method: 'alipay' } }))).toBeNull()
   })
 })

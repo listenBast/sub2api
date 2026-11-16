@@ -94,7 +94,16 @@ export interface CheckoutInfoResponse {
 
 // ==================== Orders ====================
 
+export interface CryptoPaymentDetails {
+  method: string
+  asset: 'USDT'
+  address: string
+  /** Exact decimal, never convert to a JS number. QR encodes address only. */
+  amount: string
+}
+
 export interface PaymentOrder {
+  crypto_payment?: CryptoPaymentDetails
   id: number
   user_id: number
   amount: number
@@ -213,6 +222,7 @@ export interface WechatJSAPIPayload {
 }
 
 export interface CreateOrderResult {
+  crypto_payment?: CryptoPaymentDetails
   order_id: number
   amount: number
   pay_url?: string

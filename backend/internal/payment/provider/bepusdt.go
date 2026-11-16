@@ -229,6 +229,7 @@ func (b *BEpusdt) CreatePayment(ctx context.Context, req payment.CreatePaymentRe
 	if redirect == "" {
 		redirect = b.config["returnUrl"]
 	}
+	requestedAt := time.Now()
 	data, err := b.post(ctx, "/api/v1/order/create-transaction", map[string]any{
 		"order_id": req.OrderID, "amount": json.Number(amount.String()), "fiat": "CNY", "trade_type": chain,
 		"address": address, "rate": b.config["rate"], "notify_url": b.config["notifyUrl"], "redirect_url": redirect, "timeout": seconds,
@@ -242,8 +243,8 @@ func (b *BEpusdt) CreatePayment(ctx context.Context, req payment.CreatePaymentRe
 		return nil, fmt.Errorf("bepusdt created order binding mismatch")
 	}
 	// Never accept an arbitrary upstream checkout host, protocol-relative URL,
-	// userinfo or executable scheme. The QR encodes the hosted cashier, not a
-	// bare wallet address with a misleading CNY amount.
+	// userinfo or executable scheme. The address-only QR never encodes a
+	// network, token or amount; immutable checkout details are returned separately.
 	payURL, err := url.Parse(data.PaymentURL)
 	base, _ := url.Parse(b.config["apiBase"])
 	if err != nil || payURL.Scheme != base.Scheme || payURL.Host != base.Host || payURL.User != nil {
@@ -256,7 +257,7 @@ func (b *BEpusdt) CreatePayment(ctx context.Context, req payment.CreatePaymentRe
 	metadata["bepusdt_address"] = data.Token
 	metadata["bepusdt_amount"] = amount.String()
 	metadata["bepusdt_actual_amount"] = actual.String()
-	return &payment.CreatePaymentResponse{TradeNo: data.TradeID, PayURL: data.PaymentURL, QRCode: data.PaymentURL, VerificationMetadata: metadata, Currency: "CNY"}, nil
+	return &payment.CreatePaymentResponse{ExpiresAt: requestedAt.Add(time.Duration(data.ExpirationTime) * time.Second), TradeNo: data.TradeID, PayURL: data.PaymentURL, QRCode: data.Token, VerificationMetadata: metadata, Currency: "CNY"}, nil
 }
 func bepusdtSameAddress(method, a, b string) bool {
 	if method == "usdt_trc20" {

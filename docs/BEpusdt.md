@@ -91,11 +91,28 @@ isolated instance/token per trust boundary. The native API is **not** the Epay
 
 ## User checkout and payment proof
 
-- Users choose a named USDT network. Existing recharge UI renders a QR of the
-  **hosted cashier URL** or opens that cashier on mobile. The cashier displays
-  the exact USDT quantity and selected network/address. The QR is not a bare
-  address next to a misleading CNY amount. Existing order polling, result page,
-  cancellation and recovery mechanisms remain in use.
+- Users choose a named USDT network. The website displays the **order-bound
+  receiving address, network + USDT, exact USDT quantity (a decimal string), copy
+  buttons and expiry countdown** on desktop and mobile. The QR encodes **only
+  that receiving address**, not a cashier URL, wallet URI, chain ID, token contract
+  or amount. This matches BEpusdt's inspected official cashier, which calls
+  `qrcode({text: paymentAddress})`. The create API itself returns `token` (address),
+  `actual_amount` (USDT quantity), `trade_type`, and `payment_url` (hosted cashier),
+  **not** a pre-rendered QR image or wallet payment URI.
+- After scanning, users must manually select the displayed network and USDT and
+  enter the exact quantity, ensuring withdrawal fees do not reduce the amount
+  received. Address-only QR cannot distinguish the three EVM networks. Never
+  assume Binance or any other wallet/exchange auto-selects a network, token or
+  amount; scan compatibility must be checked on the actual app/version. Copy
+  address/quantity is available when scanning is unsupported. Do not send a
+  chain's native token or transfer after expiry/cancellation. CNY settlement and
+  balance-credit amounts are not the quantity of USDT to transfer.
+- Creation persists the earlier local/gateway deadline, never extends it. The
+  nonsecret `crypto_payment` response allowlists method/asset/address/amount only;
+  provider credentials and the full snapshot are not exposed. Recovery refreshes
+  USDT instructions from the authenticated immutable order snapshot (not current
+  admin settings or cached local transfer data), failing closed on query errors.
+  Existing polling, result pages, cancellation and terminal states remain shared.
 - Native JSON webhook signatures follow upstream sorted scalar MD5+API-token
   canonicalization, with constant-time comparison. Unknown/duplicate/nested
   fields, trailing content, delimiter smuggling, missing IDs/hash, nonpositive
@@ -174,3 +191,5 @@ Protocol/source revision inspected: upstream `v03413/bepusdt`
 - [Pending-order address/chain/amount matching](https://github.com/v03413/bepusdt/blob/8a91be6a155c28cc07db18aaad0ecd06aae71582/app/task/transfer.go)
 - [Exact/prefix/rounded matching](https://github.com/v03413/bepusdt/blob/8a91be6a155c28cc07db18aaad0ecd06aae71582/docs/payment-match-mode/README.md)
 - [Supported network identifiers](https://github.com/v03413/bepusdt/blob/8a91be6a155c28cc07db18aaad0ecd06aae71582/docs/trade-type.md)
+
+- [Official cashier: address-only QR implementation](https://github.com/v03413/bepusdt/blob/8a91be6a155c28cc07db18aaad0ecd06aae71582/static/checkout/official/assets/js/checkout.js)

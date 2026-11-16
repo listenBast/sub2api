@@ -16,6 +16,7 @@
         <template v-if="paymentPhase === 'paying'">
           <PaymentStatusPanel
             :order-id="paymentState.orderId"
+            :crypto-payment="paymentState.cryptoPayment"
             :amount="paymentState.amount"
             :pay-amount="paymentState.payAmount"
             :qr-code="paymentState.qrCode"
@@ -1184,10 +1185,26 @@ onMounted(async () => {
         : typeof route.query.wechat_resume_token === 'string'
           ? route.query.wechat_resume_token
           : undefined
-      const restored = readPaymentRecoverySnapshot(
+      let restored = readPaymentRecoverySnapshot(
         window.localStorage.getItem(PAYMENT_RECOVERY_STORAGE_KEY),
         { resumeToken: routeResumeToken },
       )
+      if (restored?.paymentType.startsWith('usdt_')) {
+        // Recover payment instructions only from the authenticated order snapshot,
+        // not from a stale wallet address/amount cached before an admin edit.
+        try {
+          const { data: order } = await paymentAPI.getOrder(restored.orderId)
+          if (!order.crypto_payment || order.payment_type !== restored.paymentType) {
+            restored = null
+          } else {
+            restored.cryptoPayment = order.crypto_payment
+            restored.qrCode = order.crypto_payment.address
+            restored.expiresAt = order.expires_at
+          }
+        } catch {
+          restored = null // Fail closed: never show cached transfer instructions on query failure.
+        }
+      }
       if (restored) {
         paymentState.value = restored
         paymentPhase.value = 'paying'

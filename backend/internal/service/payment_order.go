@@ -470,7 +470,11 @@ func (s *PaymentService) invokeProvider(ctx context.Context, order *dbent.Paymen
 		return nil, classifyCreatePaymentError(req, sel.ProviderKey, err)
 	}
 	sanitizeCreatePaymentResponseDetails(pr)
+	if !pr.ExpiresAt.IsZero() && pr.ExpiresAt.Before(order.ExpiresAt) {
+		order.ExpiresAt = pr.ExpiresAt
+	}
 	update := s.entClient.PaymentOrder.UpdateOneID(order.ID).
+		SetExpiresAt(order.ExpiresAt).
 		SetNillablePaymentTradeNo(psNilIfEmpty(pr.TradeNo)).
 		SetNillablePayURL(psNilIfEmpty(pr.PayURL)).
 		SetNillableQrCode(psNilIfEmpty(pr.QRCode)).
@@ -485,6 +489,7 @@ func (s *PaymentService) invokeProvider(ctx context.Context, order *dbent.Paymen
 			snapshot[key] = value
 		}
 		update.SetProviderSnapshot(snapshot)
+		order.ProviderSnapshot = snapshot
 	}
 	_, err = update.Save(ctx)
 	if err != nil {
@@ -754,27 +759,28 @@ func classifyCreatePaymentError(req CreateOrderRequest, providerKey string, err 
 
 func buildCreateOrderResponse(order *dbent.PaymentOrder, req CreateOrderRequest, payAmount float64, sel *payment.InstanceSelection, pr *payment.CreatePaymentResponse, resultType payment.CreatePaymentResultType) *CreateOrderResponse {
 	return &CreateOrderResponse{
-		OrderID:      order.ID,
-		Amount:       order.Amount,
-		PayAmount:    payAmount,
-		FeeRate:      order.FeeRate,
-		BonusAmount:  order.BonusAmount,
-		Status:       OrderStatusPending,
-		ResultType:   resultType,
-		PaymentType:  req.PaymentType,
-		OutTradeNo:   order.OutTradeNo,
-		PayURL:       pr.PayURL,
-		QRCode:       pr.QRCode,
-		ClientSecret: pr.ClientSecret,
-		IntentID:     pr.IntentID,
-		Currency:     pr.Currency,
-		CountryCode:  pr.CountryCode,
-		PaymentEnv:   pr.PaymentEnv,
-		OAuth:        pr.OAuth,
-		JSAPI:        pr.JSAPI,
-		JSAPIPayload: pr.JSAPI,
-		ExpiresAt:    order.ExpiresAt,
-		PaymentMode:  sel.PaymentMode,
+		CryptoPayment: PaymentOrderCryptoDetails(order),
+		OrderID:       order.ID,
+		Amount:        order.Amount,
+		PayAmount:     payAmount,
+		FeeRate:       order.FeeRate,
+		BonusAmount:   order.BonusAmount,
+		Status:        OrderStatusPending,
+		ResultType:    resultType,
+		PaymentType:   req.PaymentType,
+		OutTradeNo:    order.OutTradeNo,
+		PayURL:        pr.PayURL,
+		QRCode:        pr.QRCode,
+		ClientSecret:  pr.ClientSecret,
+		IntentID:      pr.IntentID,
+		Currency:      pr.Currency,
+		CountryCode:   pr.CountryCode,
+		PaymentEnv:    pr.PaymentEnv,
+		OAuth:         pr.OAuth,
+		JSAPI:         pr.JSAPI,
+		JSAPIPayload:  pr.JSAPI,
+		ExpiresAt:     order.ExpiresAt,
+		PaymentMode:   sel.PaymentMode,
 	}
 }
 

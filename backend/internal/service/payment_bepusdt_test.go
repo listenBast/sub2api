@@ -4,11 +4,13 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"testing"
 	"time"
 
+	dbent "github.com/Wei-Shaw/sub2api/ent"
 	"github.com/Wei-Shaw/sub2api/internal/payment"
 	"github.com/stretchr/testify/require"
 )
@@ -121,4 +123,33 @@ func TestBEpusdtPaymentBindingAndDuplicateFulfillment(t *testing.T) {
 	result, err := client.PaymentOrder.Get(ctx, order.ID)
 	require.NoError(t, err)
 	require.Equal(t, OrderStatusCompleted, result.Status)
+}
+
+func TestBEpusdtCheckoutDetailsUseImmutableSnapshot(t *testing.T) {
+	key := payment.TypeBEpusdt
+	o := &dbent.PaymentOrder{PaymentType: "usdt_bep20", ProviderKey: &key, ProviderSnapshot: map[string]any{
+		"bepusdt_method": "usdt_bep20", "bepusdt_address": bepusdtTestConfig()["usdt_bep20Address"], "bepusdt_actual_amount": "1.234567890123456789",
+		"apiToken": "never-return-snapshot", "bepusdt_api_base": "https://private.example",
+	}}
+	details := PaymentOrderCryptoDetails(o)
+	require.NotNil(t, details)
+	require.Equal(t, "1.234567890123456789", details.Amount)
+	require.Equal(t, "USDT", details.Asset)
+	encoded, err := json.Marshal(details)
+	require.NoError(t, err)
+	require.NotContains(t, string(encoded), "apiToken")
+	require.NotContains(t, string(encoded), "never-return-snapshot")
+	require.NotContains(t, string(encoded), "private.example")
+	require.Equal(t, o.ProviderSnapshot["bepusdt_address"], details.Address)
+	require.Nil(t, PaymentOrderCryptoDetails(nil))
+	for _, invalid := range []string{"0", "-1", "NaN", ""} {
+		o.ProviderSnapshot["bepusdt_actual_amount"] = invalid
+		require.Nil(t, PaymentOrderCryptoDetails(o))
+	}
+	o.ProviderSnapshot["bepusdt_actual_amount"] = "2"
+	o.PaymentType = "usdt_polygon"
+	require.Nil(t, PaymentOrderCryptoDetails(o))
+	o.PaymentType = "usdt_bep20"
+	o.ProviderKey = nil
+	require.Nil(t, PaymentOrderCryptoDetails(o))
 }

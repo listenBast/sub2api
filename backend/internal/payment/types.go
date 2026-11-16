@@ -151,6 +151,7 @@ type WechatJSAPIPayload struct {
 
 // CreatePaymentResponse is returned after successfully initiating a payment.
 type CreatePaymentResponse struct {
+	ExpiresAt    time.Time               // Optional earlier gateway deadline; never extends the local deadline.
 	TradeNo      string                  // Third-party transaction ID
 	PayURL       string                  // H5 payment URL (alipay/wxpay)
 	QRCode       string                  // QR code content for scanning
