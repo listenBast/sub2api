@@ -306,3 +306,54 @@ describe('PaymentProviderDialog payment guide', () => {
     expect(wrapper.emitted('save')).toBeUndefined()
   })
 })
+
+describe('BEpusdt website administrator receiving addresses', () => {
+  it('loads, edits and saves all four independent addresses without a private key', async () => {
+    const addresses = {
+      usdt_bep20Address: '0x1111111111111111111111111111111111111111',
+      usdt_polygonAddress: '0x2222222222222222222222222222222222222222',
+      usdt_trc20Address: 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t',
+      usdt_erc20Address: '0x3333333333333333333333333333333333333333',
+    }
+    const provider = providerFactory({
+      provider_key: 'bepusdt', name: 'USDT', supported_types: ['usdt_bep20'],
+      config: { ...addresses, apiBase: 'https://crypto.example', rate: '7', minimumAmount: '1', exactMatchConfirmed: 'yes', notifyUrl: 'https://merchant.example/api/v1/payment/webhook/usdt', returnUrl: 'https://merchant.example/payment/result' },
+    })
+    const wrapper = mountDialog({ editing: provider })
+    ;(wrapper.vm as unknown as { loadProvider: (provider: ProviderInstance) => void }).loadProvider(provider)
+    await nextTick()
+    for (const address of Object.values(addresses)) {
+      expect(wrapper.findAll('input').some(input => input.element.value === address)).toBe(true)
+    }
+    expect(wrapper.text()).toContain('admin.settings.payment.usdtSetupHint')
+    expect(wrapper.text()).not.toContain('admin.settings.payment.refundEnabled')
+    const bscInput = wrapper.findAll('input').find(input => input.element.value === addresses.usdt_bep20Address)!
+    await bscInput.setValue('0x4444444444444444444444444444444444444444')
+    await wrapper.find('form').trigger('submit')
+    const payload = wrapper.emitted('save')?.[0]?.[0] as { config: Record<string, string>; refund_enabled: boolean; supported_types: string[] }
+    expect(payload.config.usdt_bep20Address).toBe('0x4444444444444444444444444444444444444444')
+    expect(payload.config.usdt_polygonAddress).toBe(addresses.usdt_polygonAddress)
+    expect(payload.config.usdt_trc20Address).toBe(addresses.usdt_trc20Address)
+    expect(payload.config.usdt_erc20Address).toBe(addresses.usdt_erc20Address)
+    expect(payload.config.notifyUrl).toBe('https://merchant.example/api/v1/payment/webhook/usdt')
+    expect(payload.refund_enabled).toBe(false)
+    expect(payload.supported_types).toEqual(['usdt_bep20'])
+    expect(payload.config).not.toHaveProperty('privateKey')
+    wrapper.unmount()
+  })
+})
+
+
+it('saves a disabled BEpusdt draft without inventing financial settings', async () => {
+  const provider = providerFactory({ provider_key: 'bepusdt', name: 'USDT draft', enabled: false, supported_types: ['usdt_bep20'], config: {} })
+  const wrapper = mountDialog({ editing: provider })
+  ;(wrapper.vm as unknown as { loadProvider: (provider: ProviderInstance) => void }).loadProvider(provider)
+  await nextTick()
+  await wrapper.find('form').trigger('submit')
+  const payload = wrapper.emitted('save')?.[0]?.[0] as { config: Record<string, string>; enabled: boolean }
+  expect(payload.enabled).toBe(false)
+  expect(payload.config.rate).toBeUndefined()
+  expect(payload.config.minimumAmount).toBeUndefined()
+  expect(payload.config.exactMatchConfirmed).toBeUndefined()
+  wrapper.unmount()
+})

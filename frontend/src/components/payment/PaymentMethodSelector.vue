@@ -39,6 +39,9 @@
         </span>
       </button>
     </div>
+    <p v-if="methods.some(method => method.type.startsWith('usdt_'))" class="mt-2 text-xs text-amber-700 dark:text-amber-300" role="note">
+      {{ t('payment.usdtNetworkWarning') }}
+    </p>
   </div>
 </template>
 

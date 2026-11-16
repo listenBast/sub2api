@@ -15,6 +15,11 @@ on:
         required: false
         type: boolean
         default: false
+      notify_telegram:
+        description: 'Explicitly send this release to the configured Telegram recipient'
+        required: false
+        type: boolean
+        default: false
       dry_run:
         description: 'Build and verify all selected artifacts without publishing'
         required: false
@@ -137,7 +142,7 @@ jobs:
           check-latest: false
           cache: false
       - name: Verify Go version
-        run: go version | grep -q 'go1.27.3'
+        run: go version | grep -q 'go1.27.4'
       - name: Restore target-specific Go cache
         id: go-cache
         uses: actions/cache/restore@v6
@@ -306,8 +311,9 @@ jobs:
           readme-filepath: ./deploy/DOCKER.md
 
       # Send Telegram notification
+      # Publishing a tag must not implicitly send a message to another channel.
       - name: Send Telegram Notification
-        if: ${{ env.DRY_RUN != 'true' && env.SIMPLE_RELEASE != 'true' }}
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.notify_telegram == true && env.DRY_RUN != 'true' && env.SIMPLE_RELEASE != 'true' }}
         env:
           TAG_MESSAGE: ${{ steps.tag_message.outputs.message }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}

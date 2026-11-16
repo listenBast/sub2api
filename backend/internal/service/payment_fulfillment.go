@@ -129,6 +129,12 @@ func (s *PaymentService) confirmPayment(ctx context.Context, oid int64, tradeNo 
 		})
 		return err
 	}
+	if pk == payment.TypeBEpusdt {
+		if err := validateBEpusdtPayment(o, tradeNo, metadata); err != nil {
+			s.writeAuditLog(ctx, o.ID, "USDT_MANUAL_REVIEW_REQUIRED", pk, map[string]any{"detail": err.Error(), "tradeNo": tradeNo})
+			return err
+		}
+	}
 	if !isValidProviderAmount(paid) {
 		s.writeAuditLog(ctx, o.ID, "PAYMENT_INVALID_AMOUNT", pk, map[string]any{
 			"expected": o.PayAmount,
@@ -179,16 +185,20 @@ func (s *PaymentService) toPaid(ctx context.Context, o *dbent.PaymentOrder, trad
 	previousStatus := o.Status
 	now := time.Now()
 	grace := now.Add(-paymentGraceMinutes * time.Minute)
+	allowedStatus := paymentorder.Or(
+		paymentorder.StatusEQ(OrderStatusPending),
+		paymentorder.StatusEQ(OrderStatusCancelled),
+		paymentorder.And(
+			paymentorder.StatusEQ(OrderStatusExpired),
+			paymentorder.UpdatedAtGTE(grace),
+		),
+	)
+	if pk == payment.TypeBEpusdt {
+		allowedStatus = paymentorder.And(paymentorder.StatusEQ(OrderStatusPending), paymentorder.ExpiresAtGT(now))
+	}
 	c, err := s.entClient.PaymentOrder.Update().Where(
 		paymentorder.IDEQ(o.ID),
-		paymentorder.Or(
-			paymentorder.StatusEQ(OrderStatusPending),
-			paymentorder.StatusEQ(OrderStatusCancelled),
-			paymentorder.And(
-				paymentorder.StatusEQ(OrderStatusExpired),
-				paymentorder.UpdatedAtGTE(grace),
-			),
-		),
+		allowedStatus,
 	).SetStatus(OrderStatusPaid).SetPayAmount(paid).SetPaymentTradeNo(tradeNo).SetPaidAt(now).ClearFailedAt().ClearFailedReason().Save(ctx)
 	if err != nil {
 		return fmt.Errorf("update to PAID: %w", err)

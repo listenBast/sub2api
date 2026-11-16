@@ -1,4 +1,5 @@
 import type {
+  CryptoPaymentDetails,
   CreateOrderRequest,
   CreateOrderResult,
   MethodLimit,
@@ -32,6 +33,7 @@ export type PaymentLaunchKind =
   | 'unhandled'
 
 export interface PaymentRecoverySnapshot {
+  cryptoPayment?: CryptoPaymentDetails
   orderId: number
   amount: number
   qrCode: string
@@ -152,6 +154,7 @@ export function decidePaymentLaunch(
 ): PaymentLaunchDecision {
   const visibleMethod = normalizeVisibleMethod(context.visibleMethod) || context.visibleMethod
   const baseState = createPaymentRecoverySnapshot({
+    cryptoPayment: result.crypto_payment,
     orderId: result.order_id,
     amount: result.amount,
     qrCode: result.qr_code || '',
@@ -212,6 +215,11 @@ export function decidePaymentLaunch(
     && baseState.qrCode
   ) {
     return { kind: 'alipay_deep_link', paymentState: baseState, recovery: baseState }
+  }
+
+  // Keep network/amount warnings and address QR visible on mobile too.
+  if (visibleMethod.startsWith('usdt_') && baseState.cryptoPayment) {
+    return { kind: 'qr_waiting', paymentState: baseState, recovery: baseState }
   }
 
   const normalizedPaymentMode = baseState.paymentMode.trim().toLowerCase()
@@ -297,6 +305,15 @@ export function readPaymentRecoverySnapshot(
       || typeof parsed.resumeToken !== 'string'
       || (parsed.alipayMobilePrecreateDeepLink != null && typeof parsed.alipayMobilePrecreateDeepLink !== 'boolean')
       || typeof parsed.createdAt !== 'number'
+      || (parsed.cryptoPayment != null && (
+        typeof parsed.cryptoPayment !== 'object'
+        || parsed.cryptoPayment.asset !== 'USDT'
+        || parsed.cryptoPayment.method !== parsed.paymentType
+        || typeof parsed.cryptoPayment.address !== 'string'
+        || typeof parsed.cryptoPayment.amount !== 'string'
+        || !/^(?:0|[1-9]\d*)(?:\.\d+)?$/.test(parsed.cryptoPayment.amount)
+        || !/[1-9]/.test(parsed.cryptoPayment.amount)
+      ))
     ) {
       return null
     }
@@ -311,6 +328,7 @@ export function readPaymentRecoverySnapshot(
     }
 
     return {
+      cryptoPayment: parsed.cryptoPayment,
       orderId: parsed.orderId,
       amount: parsed.amount,
       qrCode: parsed.qrCode,

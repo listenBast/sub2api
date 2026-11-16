@@ -111,6 +111,7 @@ var pendingOrderStatuses = []string{
 // Key matching is case-insensitive. Non-listed keys (e.g. appId, notifyUrl,
 // stripe publishableKey) are returned in plaintext by the admin GET API.
 var providerSensitiveConfigFields = map[string]map[string]struct{}{
+	payment.TypeBEpusdt:   {"apitoken": {}},
 	payment.TypeEasyPay:   {"pkey": {}},
 	payment.TypeAlipay:    {"privatekey": {}, "publickey": {}, "alipaypublickey": {}},
 	payment.TypeWxpay:     {"privatekey": {}, "apiv3key": {}, "publickey": {}},
@@ -123,6 +124,7 @@ var providerSensitiveConfigFields = map[string]map[string]struct{}{
 // all provider identity fields that are snapshotted into orders or used by
 // webhook/refund verification.
 var providerPendingOrderProtectedConfigFields = map[string]map[string]struct{}{
+	payment.TypeBEpusdt:   {"apitoken": {}, "apibase": {}, "rate": {}, "minimumamount": {}, "exactmatchconfirmed": {}, "notifyurl": {}, "returnurl": {}},
 	payment.TypeEasyPay:   {"pkey": {}, "pid": {}},
 	payment.TypeAlipay:    {"privatekey": {}, "publickey": {}, "alipaypublickey": {}, "appid": {}},
 	payment.TypeWxpay:     {"privatekey": {}, "apiv3key": {}, "publickey": {}, "appid": {}, "mpappid": {}, "mchid": {}, "publickeyid": {}, "certserial": {}},
@@ -178,11 +180,14 @@ func (s *PaymentConfigService) countPendingOrdersByPlan(ctx context.Context, pla
 }
 
 var validProviderKeys = map[string]bool{
-	payment.TypeEasyPay: true, payment.TypeAlipay: true, payment.TypeWxpay: true, payment.TypeStripe: true, payment.TypeAirwallex: true,
+	payment.TypeBEpusdt: true, payment.TypeEasyPay: true, payment.TypeAlipay: true, payment.TypeWxpay: true, payment.TypeStripe: true, payment.TypeAirwallex: true,
 }
 
 func (s *PaymentConfigService) CreateProviderInstance(ctx context.Context, req CreateProviderInstanceRequest) (*dbent.PaymentProviderInstance, error) {
 	typesStr := joinTypes(req.SupportedTypes)
+	if err := validateBEpusdtInstance(req.ProviderKey, typesStr, req.Config, req.Enabled, req.RefundEnabled || req.AllowUserRefund); err != nil {
+		return nil, err
+	}
 	if err := validateProviderRequest(req.ProviderKey, req.Name, typesStr); err != nil {
 		return nil, err
 	}
@@ -337,7 +342,7 @@ func (s *PaymentConfigService) UpdateProviderInstance(ctx context.Context, id in
 			}
 		}
 	}
-	if req.Enabled != nil && !*req.Enabled {
+	if req.Enabled != nil && !*req.Enabled && current.ProviderKey != payment.TypeBEpusdt {
 		count, err := getPendingOrderCount()
 		if err != nil {
 			return nil, err
@@ -358,6 +363,13 @@ func (s *PaymentConfigService) UpdateProviderInstance(ctx context.Context, id in
 		if err := validateEasyPayCustomMethods(configToValidate, nextSupportedTypes); err != nil {
 			return nil, err
 		}
+	}
+	refundEnabled := current.RefundEnabled
+	if req.RefundEnabled != nil {
+		refundEnabled = *req.RefundEnabled
+	}
+	if err := validateBEpusdtInstance(current.ProviderKey, nextSupportedTypes, configToValidate, nextEnabled, refundEnabled || (req.AllowUserRefund != nil && *req.AllowUserRefund)); err != nil {
+		return nil, err
 	}
 	// Validate merged config when the instance will end up enabled.
 	// This surfaces provider-level errors (e.g. wxpay missing certSerial) at save time,
@@ -388,7 +400,7 @@ func (s *PaymentConfigService) UpdateProviderInstance(ctx context.Context, id in
 		if err != nil {
 			return nil, err
 		}
-		if count > 0 {
+		if count > 0 && current.ProviderKey != payment.TypeBEpusdt {
 			// Load current instance to compare types
 			oldTypes := strings.Split(current.SupportedTypes, ",")
 			newTypes := req.SupportedTypes

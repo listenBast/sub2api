@@ -170,6 +170,26 @@
       </template>
     </template>
 
+    <!-- Address-only USDT QR. Existing order polling/countdown/terminal states remain shared. -->
+    <template v-else-if="cryptoPayment && cryptoPayment.method === paymentType">
+      <CryptoPaymentInstructions :details="cryptoPayment" />
+      <div class="card p-4 text-center">
+        <p class="text-sm text-gray-500 dark:text-gray-400">{{ t('payment.qr.expiresIn') }}</p>
+        <p class="mt-1 text-2xl font-bold tabular-nums text-gray-900 dark:text-white">{{ countdownDisplay }}</p>
+        <p class="mt-1 text-xs text-gray-400 dark:text-gray-500">{{ t('payment.qr.waitingPayment') }}</p>
+      </div>
+      <button class="btn btn-secondary w-full" :disabled="cancelling" @click="handleCancel">
+        {{ cancelling ? t('common.processing') : t('payment.qr.cancelOrder') }}
+      </button>
+    </template>
+
+    <template v-else-if="paymentType.startsWith('usdt_')">
+      <p class="card p-6 text-sm text-red-600 dark:text-red-400" role="alert">{{ t('payment.usdtDetailsUnavailable') }}</p>
+      <button class="btn btn-secondary w-full" :disabled="cancelling" @click="handleCancel">
+        {{ cancelling ? t('common.processing') : t('payment.qr.cancelOrder') }}
+      </button>
+    </template>
+
     <!-- QR Code Mode -->
     <template v-else-if="showQRCode">
       <div class="card p-6">
@@ -231,7 +251,8 @@ import { paymentAPI } from '@/api/payment'
 import { extractI18nErrorMessage } from '@/utils/apiError'
 import { getPaymentPopupFeatures, isBuiltInAlipayMethod, isBuiltInWxpayMethod } from '@/components/payment/providerConfig'
 import { currencySymbol, formatPaymentAmount, normalizePaymentCurrency } from '@/components/payment/currency'
-import type { PaymentOrder } from '@/types/payment'
+import CryptoPaymentInstructions from './CryptoPaymentInstructions.vue'
+import type { CryptoPaymentDetails, PaymentOrder } from '@/types/payment'
 import Icon from '@/components/icons/Icon.vue'
 import QRCode from 'qrcode'
 import alipayIcon from '@/assets/icons/alipay.svg'
@@ -244,6 +265,7 @@ import {
 } from './alipayDeepLink'
 
 const props = defineProps<{
+  cryptoPayment?: CryptoPaymentDetails
   orderId: number
   amount?: number
   payAmount?: number

@@ -19,7 +19,7 @@ export type OrderStatus =
   | 'REFUNDED'
   | 'REFUND_FAILED'
 
-export type PaymentType = 'alipay' | 'wxpay' | 'alipay_direct' | 'wxpay_direct' | 'stripe' | 'easypay' | 'airwallex'
+export type PaymentType = 'alipay' | 'wxpay' | 'alipay_direct' | 'wxpay_direct' | 'stripe' | 'easypay' | 'airwallex' | 'bepusdt' | 'usdt_bep20' | 'usdt_polygon' | 'usdt_trc20' | 'usdt_erc20'
 
 export type OrderType = 'balance' | 'subscription'
 
@@ -94,7 +94,16 @@ export interface CheckoutInfoResponse {
 
 // ==================== Orders ====================
 
+export interface CryptoPaymentDetails {
+  method: string
+  asset: 'USDT'
+  address: string
+  /** Exact decimal, never convert to a JS number. QR encodes address only. */
+  amount: string
+}
+
 export interface PaymentOrder {
+  crypto_payment?: CryptoPaymentDetails
   id: number
   user_id: number
   amount: number
@@ -213,6 +222,7 @@ export interface WechatJSAPIPayload {
 }
 
 export interface CreateOrderResult {
+  crypto_payment?: CryptoPaymentDetails
   order_id: number
   amount: number
   pay_url?: string
