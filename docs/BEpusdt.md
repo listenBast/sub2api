@@ -1,7 +1,61 @@
 # USDT recharge with self-hosted BEpusdt / 自托管 USDT 充值
 
-**Status:** code + mock contract tests only. Not deployed, no real address configured,
-no real payment made, and no browser/visual acceptance performed.
+**Acceptance boundary:** automated code/mock contract tests, not real settlement.
+Publishing a sub2api release does **not** install BEpusdt, configure addresses or
+update a running website. No production deployment, real transfer, wallet-app
+scan compatibility test or browser/visual acceptance has been performed here.
+
+## 给站长的最短操作指南（发布后自行测试）
+
+**不是只填地址就能自动到账。** sub2api 管理订单和余额；独立运行的 BEpusdt
+负责扫描区块链、确认转账并发送签名通知。两边都运行且配置正确才有自动充值。
+发布软件和更新你的网站是两件事：本次发布不包含生产服务器升级；更新生产须另行批准。
+
+1. **先准备隔离测试环境。** 安装本次 sub2api 发布包，在自己的测试站验收后，
+   再安排经批准的生产升级。先不要开启对外 USDT 收款。
+2. **单独安装 BEpusdt。** 按官方版本对应的
+   [Docker 安装文档](https://github.com/v03413/bepusdt/blob/8a91be6a155c28cc07db18aaad0ecd06aae71582/docs/docker/docker.md)
+   或 [Linux 安装文档](https://github.com/v03413/bepusdt/blob/8a91be6a155c28cc07db18aaad0ecd06aae71582/docs/linux/install.md)
+   部署并固定经过验收的版本/镜像摘要，不要盲目跟随 `latest`。
+   保护管理后台和 API 令牌、持久化数据并备份、保持服务器时钟同步、配置 HTTPS。
+   核对所启用链的 RPC 可用性、正确的 USDT 合约、确认数和重组处理。
+   此集成只需公开收款地址；不要给网站、机器人或聊天提供钱包私钥/助记词。
+3. **核对收款引擎。** 在 BEpusdt 设置传统/精确金额匹配，**不能用前缀或修约匹配**。
+   核实当前版本确实监控原生创建交易接口传入的地址。网站的“已核对精确匹配”
+   是管理员确认，不会远程读取引擎设置。不要在待付订单存在时更换实例、令牌或匹配规则。
+4. **网站系统管理员 → 系统设置 → 支付。** 启用 BEpusdt 服务商类型，创建一个
+   暂停用的实例。分别填写 BSC/BEP20、Polygon PoS、TRON/TRC20、Ethereum/ERC20
+   的收款地址；只勾选准备好且已核对地址/网络/代币的链。地址在这个网站里保存和修改，
+   不需要发到聊天，也不是写死在代码中。没有地址的链不要启用。
+5. **填实例和财务配置。** 填 BEpusdt 的 HTTPS 基础地址和 API 令牌；回调是
+   `https://你的网站域名/api/v1/payment/webhook/usdt`，返回页是
+   `https://你的网站域名/payment/result`。基础地址不应带创建/查单接口路径。
+   管理员自行确定正数固定“人民币/1 USDT”汇率和人民币最低支付额；没有默认财务策略。
+   还须核对已有充值倍率/手续费和交易所最低入金/提现手续费，勿把余额金额或人民币金额
+   当成应付 USDT 数量。检查完成后，才启用实例及支付总开关。
+6. **保证双向连通。** 网站服务端要能访问该 BEpusdt 的创建、查单和取消接口；
+   BEpusdt 要能向网站回调地址 POST JSON。不能让登录页、验证码、WAF 挑战或反向代理
+   改写回调正文；API 令牌不能放进前端、URL、截图或公开日志。
+7. **用普通测试用户创建一笔小额订单。** 先记下订单号和余额。金额应满足你自己
+   配置的最低额及收款钱包/交易所的最低入金要求。逐项核对页面的网络、USDT、完整地址、
+   精确数量和倒计时。**二维码只包含地址，不包含链、代币或金额**；扫码后仍需手动核对
+   网络、选择 USDT、填写精确数量，并确保扣除提现手续费后的实收数量一致。
+   不保证币安或其它应用自动选链/填金额；不兼容扫码时用复制地址/数量按钮。
+8. **你自行确认后只付款一次。** 应在倒计时结束前完成，等待区块确认和签名通知；
+   网站订单应完成、余额只增加一次。不要因页面暂未刷新而重复转账。
+   再由有权限的运维通过 BEpusdt 该版本支持的原订单重通知机制重投同一签名通知，
+   核对订单不重复充值；刷新/浏览器返回本身不能触发充值。
+   每条准备开放的链均须单独验收，先验收一条也可以，其余保持关闭。
+
+**不要用真实资金故意测试跨链、少付、多付、取消后转账或晚付。** 这些先在隔离 mock
+环境验证。此类真实异常订单保守地进入人工核查，不承诺自动补单或自动退款。
+改地址后，新订单使用新地址，旧待付订单继续使用创建时地址；旧地址/链扫描必须保留
+到旧订单结清。不要把删除旧实例或重新建单当成恢复支付的方法。
+
+若“已转账但未充值”，先停止重复付款，按订单号核对：链/USDT 合约/地址/精确实收数量、
+交易确认、订单是否过期或已取消、BEpusdt 原订单状态及重通知、网站同实例查单是否成功、
+网站订单审计记录。上游查单失败、金额/网络/地址不符、晚到通知都不会通过浏览器点击
+“已支付”强行入账。不得通过关闭验签、伪造回调或只相信查单结果来绕过检查。
 
 ## Website administrator setup / 网站系统管理员设置
 
