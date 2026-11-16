@@ -207,6 +207,11 @@ const paymentTypeFilterOptions = computed(() => [
   { value: 'wxpay', label: t('payment.methods.wxpay') },
   { value: 'stripe', label: t('payment.methods.stripe') },
   { value: 'airwallex', label: t('payment.methods.airwallex') },
+  { value: 'usdt_bep20', label: t('payment.methods.usdt_bep20') },
+  { value: 'usdt_polygon', label: t('payment.methods.usdt_polygon') },
+  { value: 'usdt_trc20', label: t('payment.methods.usdt_trc20') },
+  { value: 'usdt_erc20', label: t('payment.methods.usdt_erc20') },
+
 ])
 
 const orderTypeFilterOptions = computed(() => [

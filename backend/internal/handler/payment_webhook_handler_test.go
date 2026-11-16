@@ -154,6 +154,8 @@ func TestExtractOutTradeNo(t *testing.T) {
 		rawBody     string
 		want        string
 	}{
+		{name: "bepusdt native order ID", providerKey: payment.TypeBEpusdt, rawBody: `{"trade_id":"trade-1","order_id":"sub2_usdt_1","status":2}`, want: "sub2_usdt_1"},
+		{name: "bepusdt malformed JSON", providerKey: payment.TypeBEpusdt, rawBody: `{"order_id":`, want: ""},
 		{
 			name:        "easypay query payload",
 			providerKey: "easypay",

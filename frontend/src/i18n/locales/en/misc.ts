@@ -305,7 +305,14 @@ export default {
     fee: 'Fee',
     actualPay: 'Actual Payment',
     createOrder: 'Confirm Payment',
+    usdtNetworkWarning: 'Send the exact USDT quantity to the selected network address shown by the cashier (fees excluded). Do not transfer across networks or after expiry. Short, excess or late payments need manual review.',
     methods: {
+      bepusdt: 'USDT (BEpusdt)',
+      usdt_bep20: 'USDT · BSC (BEP20)',
+      usdt_polygon: 'USDT · Polygon PoS',
+      usdt_trc20: 'USDT · TRON (TRC20)',
+      usdt_erc20: 'USDT · Ethereum (ERC20)',
+
       easypay: 'EasyPay',
       alipay: 'Alipay',
       wxpay: 'WeChat Pay',

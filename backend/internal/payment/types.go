@@ -20,6 +20,7 @@ const (
 	TypeCard         PaymentType = "card"
 	TypeLink         PaymentType = "link"
 	TypeEasyPay      PaymentType = "easypay"
+	TypeBEpusdt      PaymentType = "bepusdt"
 	TypeAirwallex    PaymentType = "airwallex"
 )
 
@@ -115,6 +116,8 @@ type CreatePaymentRequest struct {
 	// alipay.trade.precreate instead of alipay.trade.wap.pay.
 	AlipayMobilePrecreate bool
 	InstanceSubMethods    string // Comma-separated sub-methods from instance supported_types (for Stripe)
+
+	ExpiresAt time.Time // Local deadline; crypto payments must not outlive it.
 }
 
 // CreatePaymentResultType describes the shape of the create-payment result.
@@ -159,6 +162,8 @@ type CreatePaymentResponse struct {
 	ResultType   CreatePaymentResultType // Typed result contract for frontend flows
 	OAuth        *WechatOAuthInfo        // WeChat OAuth bootstrap payload when required
 	JSAPI        *WechatJSAPIPayload     // WeChat JSAPI invocation payload when ready
+
+	VerificationMetadata map[string]string // Non-secret immutable payment binding, persisted in provider_snapshot.
 }
 
 // QueryOrderResponse describes the payment status from the upstream provider.

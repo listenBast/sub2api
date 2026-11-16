@@ -329,7 +329,14 @@ export default {
     fee: '手续费',
     actualPay: '实付金额',
     createOrder: '确认支付',
+    usdtNetworkWarning: '仅向收银台显示的所选网络地址支付准确 USDT 数量（不含提现手续费）。请勿跨链或过期转账；少付、多付、晚付需人工核查。',
     methods: {
+      bepusdt: 'USDT (BEpusdt)',
+      usdt_bep20: 'USDT · BSC (BEP20)',
+      usdt_polygon: 'USDT · Polygon PoS',
+      usdt_trc20: 'USDT · TRON (TRC20)',
+      usdt_erc20: 'USDT · Ethereum (ERC20)',
+
       easypay: '易支付',
       alipay: '支付宝',
       wxpay: '微信支付',

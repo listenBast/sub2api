@@ -37,6 +37,7 @@ export interface CallbackPaths {
 
 /** Maps provider key → available payment types. */
 export const PROVIDER_SUPPORTED_TYPES: Record<string, string[]> = {
+  bepusdt: ['usdt_bep20', 'usdt_polygon', 'usdt_trc20', 'usdt_erc20'],
   easypay: ['alipay', 'wxpay'],
   alipay: ['alipay'],
   wxpay: ['wxpay'],
@@ -48,7 +49,7 @@ export const PROVIDER_SUPPORTED_TYPES: Record<string, string[]> = {
 export const EASYPAY_PAYMENT_MODES = ['qrcode', 'popup'] as const
 
 /** Fixed display order for user-facing payment methods */
-export const METHOD_ORDER = ['alipay', 'alipay_direct', 'wxpay', 'wxpay_direct', 'stripe', 'airwallex'] as const
+export const METHOD_ORDER = ['alipay', 'alipay_direct', 'wxpay', 'wxpay_direct', 'stripe', 'airwallex', 'usdt_bep20', 'usdt_polygon', 'usdt_trc20', 'usdt_erc20'] as const
 
 export function isBuiltInAlipayMethod(type: string): boolean {
   return type === 'alipay' || type === 'alipay_direct'
@@ -105,6 +106,7 @@ export function getPaymentPopupFeatures(): string {
 
 /** Webhook paths for each provider (relative to origin). */
 export const WEBHOOK_PATHS: Record<string, string> = {
+  bepusdt: '/api/v1/payment/webhook/usdt',
   easypay: '/api/v1/payment/webhook/easypay',
   alipay: '/api/v1/payment/webhook/alipay',
   wxpay: '/api/v1/payment/webhook/wxpay',
@@ -116,6 +118,7 @@ export const RETURN_PATH = '/payment/result'
 
 /** Fixed callback paths per provider — displayed as read-only after base URL. */
 export const PROVIDER_CALLBACK_PATHS: Record<string, CallbackPaths> = {
+  bepusdt: { notifyUrl: WEBHOOK_PATHS.bepusdt, returnUrl: RETURN_PATH },
   easypay: { notifyUrl: WEBHOOK_PATHS.easypay, returnUrl: RETURN_PATH },
   alipay: { notifyUrl: WEBHOOK_PATHS.alipay, returnUrl: RETURN_PATH },
   wxpay: { notifyUrl: WEBHOOK_PATHS.wxpay },
@@ -125,6 +128,18 @@ export const PROVIDER_CALLBACK_PATHS: Record<string, CallbackPaths> = {
 
 /** Per-provider config fields (excludes notifyUrl/returnUrl which are handled separately). */
 export const PROVIDER_CONFIG_FIELDS: Record<string, ConfigFieldDef[]> = {
+  bepusdt: [
+    { key: 'apiBase', label: '', sensitive: false },
+    { key: 'apiToken', label: '', sensitive: true },
+    { key: 'rate', label: '', sensitive: false, hintKey: 'admin.settings.payment.usdtRateHint' },
+    { key: 'minimumAmount', label: '', sensitive: false },
+    { key: 'exactMatchConfirmed', label: '', sensitive: false, options: [{ value: 'yes', label: 'admin.settings.payment.usdtExactMatchYes' }] },
+    { key: 'usdt_bep20Address', label: '', sensitive: false, optional: true, clearable: true },
+    { key: 'usdt_polygonAddress', label: '', sensitive: false, optional: true, clearable: true },
+    { key: 'usdt_trc20Address', label: '', sensitive: false, optional: true, clearable: true },
+    { key: 'usdt_erc20Address', label: '', sensitive: false, optional: true, clearable: true },
+  ],
+
   easypay: [
     { key: 'pid', label: 'PID', sensitive: false },
     { key: 'pkey', label: 'PKey', sensitive: true },
