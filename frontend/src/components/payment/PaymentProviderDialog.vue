@@ -156,6 +156,7 @@
           {{ paymentGuide.summary }}
         </p>
         <div class="space-y-3">
+          <UsdtRateStatus v-if="form.provider_key === 'bepusdt' && config.rateMode === 'coingecko'" />
           <div v-for="field in resolvedFields" :key="field.key">
             <label class="input-label">
               {{ field.label }}
@@ -309,6 +310,7 @@
 
 <script setup lang="ts">
 import { reactive, computed, ref } from 'vue'
+import UsdtRateStatus from './UsdtRateStatus.vue'
 import { useI18n } from 'vue-i18n'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import HelpTooltip from '@/components/common/HelpTooltip.vue'
@@ -472,7 +474,7 @@ const availableTypes = computed(() => {
 })
 
 const resolvedFields = computed(() => {
-  const fields = PROVIDER_CONFIG_FIELDS[form.provider_key] || []
+  const fields = (PROVIDER_CONFIG_FIELDS[form.provider_key] || []).filter(f => !(form.provider_key === 'bepusdt' && config.rateMode === 'coingecko' && f.key === 'rate'))
   return fields.map(f => ({
     ...f,
     label: f.label || t(`admin.settings.payment.field_${f.key}`),
@@ -679,7 +681,7 @@ function handleSave() {
     // BEpusdt drafts may be saved without choosing financial policy or keys.
     // The backend still refuses enablement until all prerequisites are set.
     if (form.provider_key === 'bepusdt' && !form.enabled) continue
-    if (f.optional) continue
+    if (f.optional || (form.provider_key === 'bepusdt' && config.rateMode === 'coingecko' && f.key === 'rate')) continue
     if (props.editing && f.sensitive) continue
     const val = (config[f.key] || '').trim()
     if (!val) {

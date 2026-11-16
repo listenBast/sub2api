@@ -23,6 +23,13 @@
           <button type="button" class="btn btn-secondary text-xs" data-test="copy-usdt-address" @click="copyToClipboard(details.address)">{{ t('payment.usdtCopyAddress') }}</button>
         </dd>
       </div>
+      <div v-if="details.rate" data-test="usdt-locked-rate">
+        <dt>{{ t('admin.settings.payment.usdtLockedRate') }}</dt>
+        <dd>1 USDT = {{ details.rate }} CNY · {{ details.rate_source === 'coingecko' ? 'CoinGecko' : t('admin.settings.payment.usdtRateFixed') }}</dd>
+        <dd v-if="details.rate_quoted_at">{{ t('admin.settings.payment.usdtQuoteTime') }}: {{ new Date(details.rate_quoted_at).toLocaleString() }}</dd>
+        <dd v-if="details.rate_fetched_at">{{ t('admin.settings.payment.usdtFetchTime') }}: {{ new Date(details.rate_fetched_at).toLocaleString() }}</dd>
+        <dd>{{ t('admin.settings.payment.usdtLockedHint') }}</dd>
+      </div>
     </dl>
     <div class="flex justify-center rounded-lg bg-white p-3">
       <canvas ref="canvas" class="max-w-full" :aria-label="t('payment.usdtAddressQr')" role="img"></canvas>

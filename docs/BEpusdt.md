@@ -249,3 +249,64 @@ Protocol/source revision inspected: upstream `v03413/bepusdt`
 - [Supported network identifiers](https://github.com/v03413/bepusdt/blob/8a91be6a155c28cc07db18aaad0ecd06aae71582/docs/trade-type.md)
 
 - [Official cashier: address-only QR implementation](https://github.com/v03413/bepusdt/blob/8a91be6a155c28cc07db18aaad0ecd06aae71582/static/checkout/official/assets/js/checkout.js)
+
+## Automatic CoinGecko reference rate (optional)
+
+System administrators may select **Automatic market reference price** instead of
+Fixed rate. Existing instances without `rateMode` remain fixed; switching back to
+fixed requires an explicit positive fixed rate. Automatic mode needs no API key.
+The source is CoinGecko's **USDT/CNY market reference**, not Binance P2P quotes or
+a guaranteed executable conversion price. USDT is not assumed to equal USD.
+Attribution: [CoinGecko](https://www.coingecko.com/).
+
+The backend requests only the hard-coded HTTPS CoinGecko `simple/price` endpoint
+(`tether`, `cny`, `include_last_updated_at=true`, `precision=full`), with an 8-second
+timeout, no redirects, and an 8 KiB body limit. Quotes share a process-local
+30-second cache and concurrent requests share a fetch. Source timestamps must be
+no older than 120 seconds and no more than 5 seconds ahead of the server clock.
+Prices use bounded plain decimal notation (18 integer/fractional digits), not
+floating-point monetary arithmetic or exponent notation. The cache is not a
+promise of tick-by-tick pricing. No discretionary volatility band, spread, fee,
+or alternate source is silently introduced.
+
+A failed/invalid/expired fetch (including 429) blocks **new** USDT orders, clears
+any cached quote, and briefly suppresses repeated fetches for 10 seconds. There
+is **no** fallback to a retained fixed rate, stale quote, BEpusdt's native automatic
+rate table, or another source. The administrator can inspect availability, source
+quote time, and last-fetch time without exposing provider credentials.
+
+Before creating the engine transaction, the website saves the source, exact
+rate, quote/fetch times in the order snapshot. The engine's final USDT quantity
+is also snapshotted: rounding and unique-amount allocation for concurrent pending
+orders can affect it. Always pay the **actual displayed USDT quantity**, not a
+browser-side CNY/rate calculation. Recovery, polling and callbacks do not fetch a
+new quote or change an old order. Changing rate mode remains blocked while that
+instance has pending orders; refreshing a runtime quote does not edit instance
+configuration.
+
+**The recharge balance multiplier remains independent.** Automatic USDT conversion
+does not decide whether CNY 6.67 should credit 6.67 or 1 station balance units. No
+balance multiplier, minimum payment, receiving address or fee is changed by the
+mode itself. The recharge form amount remains CNY; do not confuse it with USDT.
+
+### Engine prerequisite and acceptance
+
+Use the existing TLS-hardened pinned BEpusdt build plus the tracked
+`deploy/bepusdt/explicit-rate-decimal.patch` (upstream commit
+`8a91be6a155c28cc07db18aaad0ecd06aae71582`). It makes explicit numeric native-API
+rates use exact Decimal directly, without a float64 round trip or an unrelated
+historical rate-table row. It does not enable the engine's own automatic-rate
+fallback. Preserve all TLS/security patches when applying this patch or upgrading.
+
+Tests must cover new/legacy modes, concurrent quote caching, stale/future/invalid
+quotes, HTTP failures and no fallback, immutable rates across retries/restoration,
+exact decimal forwarding, signature/query binding and duplicate fulfillment.
+After deployment, inspect the administrator quote status and create one small
+order whose net receipt can meet the wallet/exchange's own minimum. Verify exact
+network/token/quantity, pay once, and check one order completion and one credit.
+No real settlement, exchange QR compatibility or visual acceptance is implied by
+mock/unit or infrastructure diagnostics.
+
+Source documentation:
+- https://docs.coingecko.com/v3.0.1/reference/simple-price
+- https://docs.coingecko.com/docs/common-errors-rate-limit

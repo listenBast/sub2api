@@ -1,0 +1,48 @@
+--- a/app/model/rate.go
++++ b/app/model/rate.go
+@@ -173,7 +173,22 @@
+ 	return math.Floor(val*p+0.5) / p
+ }
+ 
++var explicitOrderRate = regexp.MustCompile(`^[0-9]{1,18}(?:\.[0-9]{1,18})?$`)
++
+ func GetOrderRate(token Crypto, fiat Fiat, syntax string) (decimal.Decimal, error) {
++	// Explicit native API rates are authoritative per-order decimal quotes. They
++	// must not round-trip through float64 or depend on stale auto-rate DB rows.
++	if len(syntax) > 0 && syntax[0] >= '0' && syntax[0] <= '9' {
++		if !explicitOrderRate.MatchString(syntax) {
++			return decimal.Zero, fmt.Errorf("invalid explicit decimal rate")
++		}
++		value, err := decimal.NewFromString(syntax)
++		if err != nil || !value.IsPositive() {
++			return decimal.Zero, fmt.Errorf("explicit rate must be positive")
++		}
++		return value, nil
++	}
++
+ 	var r Rate
+ 	Db.Where("crypto = ? and fiat = ?", token, fiat).Order("created_at desc").Limit(1).Find(&r)
+ 	if r.ID == 0 {
+--- /dev/null
++++ b/app/model/rate_decimal_test.go
+@@ -0,0 +1,20 @@
++package model
++
++import (
++	"github.com/shopspring/decimal"
++	"testing"
++)
++
++func TestExplicitOrderRateNoDatabaseOrFloat(t *testing.T) {
++	for _, raw := range []string{"6.67", "6.6623951423103795", "0.000000000000000001", "999999999999999999"} {
++		got, err := GetOrderRate(Crypto("USDT"), Fiat("CNY"), raw)
++		if err != nil || !got.Equal(decimal.RequireFromString(raw)) {
++			t.Fatalf("decimal rate %s: %s %v", raw, got, err)
++		}
++	}
++	for _, raw := range []string{"0", "0.0", "1e999999", "1e2", "6.7.8", "9999999999999999999", "0.0000000000000000001"} {
++		if _, err := GetOrderRate(Crypto("USDT"), Fiat("CNY"), raw); err == nil {
++			t.Fatalf("accepted invalid explicit rate %s", raw)
++		}
++	}
++}

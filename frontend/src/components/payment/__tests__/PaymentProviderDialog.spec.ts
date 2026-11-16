@@ -5,6 +5,8 @@ import PaymentProviderDialog from '@/components/payment/PaymentProviderDialog.vu
 import { STRIPE_SDK_API_VERSION } from '@/components/payment/providerConfig'
 import type { ProviderInstance } from '@/types/payment'
 
+vi.mock('@/api/admin/payment', () => ({ adminPaymentAPI: { getUSDTRate: vi.fn().mockResolvedValue({ data: { available: false } }) } }))
+
 const messages: Record<string, string> = {
   'admin.settings.payment.providerConfig': 'Credentials',
   'admin.settings.payment.easypayCustomMethods': 'Custom EasyPay methods',
@@ -356,4 +358,15 @@ it('saves a disabled BEpusdt draft without inventing financial settings', async 
   expect(payload.config.minimumAmount).toBeUndefined()
   expect(payload.config.exactMatchConfirmed).toBeUndefined()
   wrapper.unmount()
+})
+
+
+describe('USDT automatic rate mode', () => {
+  it('displays quote status without requiring a retained fixed rate', async () => {
+    const wrapper = mountDialog({ editing: providerFactory({ provider_key: 'bepusdt', supported_types: ['usdt_bep20'], config: { rateMode: 'coingecko', apiBase: 'https://engine.example', minimumAmount: '1', exactMatchConfirmed: 'yes' } }) })
+    ;(wrapper.vm as unknown as { loadProvider: (provider: ProviderInstance) => void }).loadProvider(providerFactory({ provider_key: 'bepusdt', config: { rateMode: 'coingecko' } }))
+    await nextTick()
+    expect(wrapper.find('[data-test="usdt-rate-status"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
 })

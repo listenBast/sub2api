@@ -98,6 +98,10 @@ export interface CryptoPaymentDetails {
   method: string
   asset: 'USDT'
   address: string
+  rate?: string
+  rate_source?: string
+  rate_quoted_at?: string
+  rate_fetched_at?: string
   /** Exact decimal, never convert to a JS number. QR encodes address only. */
   amount: string
 }

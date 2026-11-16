@@ -128,6 +128,7 @@ func RegisterPaymentRoutes(
 		providers := adminGroup.Group("/providers")
 		{
 			providers.GET("", adminPaymentHandler.ListProviders)
+			providers.GET("/usdt-rate", adminPaymentHandler.GetUSDTRate)
 			providers.POST("", adminPaymentHandler.CreateProvider)
 			providers.PUT("/:id", adminPaymentHandler.UpdateProvider)
 			providers.DELETE("/:id", adminPaymentHandler.DeleteProvider)
