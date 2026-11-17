@@ -348,28 +348,18 @@ func applyUsageBillingBatchBalance(ctx context.Context, tx *sql.Tx, userID int64
 		return nil
 	}
 
-	var newBalance decimal.Decimal
-	err := tx.QueryRowContext(ctx, `
-		UPDATE users
-		SET balance = balance - $1,
-			updated_at = NOW()
-		WHERE id = $2 AND deleted_at IS NULL
-		RETURNING balance
-	`, group.sum, userID).Scan(&newBalance)
-	if errors.Is(err, sql.ErrNoRows) {
-		return service.ErrUserNotFound
-	}
-	if err != nil {
-		return err
-	}
-
-	running := newBalance.Add(group.sum)
+	// sub2api-custom: team billing
+	// Apply each command through the team-aware deduct so per-command
+	// personal/team/uncovered fields and no-overdraft behavior match
+	// sequential Apply. Commands remain in one transaction and still lock
+	// the user row after subscriptions. BalanceMode may differ per key, so
+	// a single summed UPDATE cannot reproduce the same split.
 	for _, i := range group.indexes {
-		cost := usageBillingAmount(cmds[i].BalanceCost)
-		sufficient := running.GreaterThanOrEqual(cost)
-		running = running.Sub(cost)
-		balance := running.InexactFloat64()
-		outcomes[i].Result.NewBalance = &balance
+		newBalance, sufficient, err := deductTeamAwareUsageBillingBalance(ctx, tx, cmds[i], outcomes[i].Result)
+		if err != nil {
+			return err
+		}
+		outcomes[i].Result.NewBalance = &newBalance
 		outcomes[i].Result.BalanceOverdrafted = !sufficient
 	}
 	return nil

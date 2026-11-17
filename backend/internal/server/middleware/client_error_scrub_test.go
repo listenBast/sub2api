@@ -34,16 +34,24 @@ func setupScrubRouter(raw *rawCaptureWriter, handler gin.HandlerFunc) *gin.Engin
 	}
 	r.Use(ClientErrorScrubWrap(opsLike))
 	r.POST("/x", func(c *gin.Context) {
-		service.RegisterClientScrubRequestedModel(c, "gpt-6.1-sol")
-		service.RegisterClientScrubUpstreamModel(c, "gpt-6-luna")
+		acc := &service.Account{
+			ID:       1,
+			Name:     "internal-relay-account",
+			Platform: service.PlatformOpenAI,
+			Type:     service.AccountTypeAPIKey,
+			Credentials: map[string]any{
+				"base_url": "https://relay.example-upstream.com/v1",
+			},
+		}
+		service.RegisterClientScrubAccount(c, acc, "gpt-6.1-sol")
 		handler(c)
 	})
 	return r
 }
 
-func TestClientErrorScrub_ErrorBodyScrubbedForClientRawForOps(t *testing.T) {
+func TestClientErrorScrub_ErrorBodyScrubsRoutingDetailsPreservesModel(t *testing.T) {
 	raw := &rawCaptureWriter{}
-	body := `{"error":{"message":"The model gpt-6-luna does not exist"}}`
+	body := `{"error":{"message":"The model gpt-6-luna does not exist at https://relay.example-upstream.com/v1"}}`
 	r := setupScrubRouter(raw, func(c *gin.Context) {
 		c.Header("Content-Length", "999")
 		c.Data(http.StatusNotFound, "application/json", []byte(body))
@@ -52,9 +60,9 @@ func TestClientErrorScrub_ErrorBodyScrubbedForClientRawForOps(t *testing.T) {
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/x", nil))
 
 	require.Equal(t, http.StatusNotFound, w.Code)
-	require.Equal(t, `{"error":{"message":"The model gpt-6.1-sol does not exist"}}`, w.Body.String())
-	require.NotContains(t, w.Body.String(), "gpt-6-luna")
-	require.Contains(t, raw.buf.String(), "gpt-6-luna", "ops capture must stay raw")
+	require.Equal(t, `{"error":{"message":"The model gpt-6-luna does not exist at upstream"}}`, w.Body.String())
+	require.Contains(t, w.Body.String(), "gpt-6-luna")
+	require.Contains(t, raw.buf.String(), "https://relay.example-upstream.com/v1", "ops capture must stay raw")
 }
 
 func TestClientErrorScrub_SSEErrorEventScrubbedButDataEventsUntouched(t *testing.T) {
@@ -62,16 +70,16 @@ func TestClientErrorScrub_SSEErrorEventScrubbedButDataEventsUntouched(t *testing
 	r := setupScrubRouter(raw, func(c *gin.Context) {
 		c.Header("Content-Type", "text/event-stream")
 		c.Status(http.StatusOK)
-		_, _ = c.Writer.WriteString("data: {\"type\":\"response.output_text.delta\",\"delta\":\"gpt-6-luna\"}\n\n")
-		_, _ = c.Writer.WriteString("event: error\ndata: {\"type\":\"error\",\"error\":{\"message\":\"gpt-6-luna overloaded\"}}\n\n")
+		_, _ = c.Writer.WriteString("data: {\"type\":\"response.output_text.delta\",\"delta\":\"https://relay.example-upstream.com/v1\"}\n\n")
+		_, _ = c.Writer.WriteString("event: error\ndata: {\"type\":\"error\",\"error\":{\"message\":\"gpt-6-luna overloaded at https://relay.example-upstream.com/v1\"}}\n\n")
 	})
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/x", nil))
 
 	out := w.Body.String()
-	require.Contains(t, out, `"delta":"gpt-6-luna"`)
-	require.Contains(t, out, `gpt-6.1-sol overloaded`)
-	require.NotContains(t, out, "gpt-6-luna overloaded")
+	require.Contains(t, out, `"delta":"https://relay.example-upstream.com/v1"`)
+	require.Contains(t, out, `gpt-6-luna overloaded at upstream`)
+	require.NotContains(t, out, "gpt-6-luna overloaded at https://relay.example-upstream.com/v1")
 }
 
 func TestClientErrorScrub_ReturnsOriginalLengthAndNoopWhenNothingRegistered(t *testing.T) {
@@ -90,7 +98,7 @@ func TestClientErrorScrub_ReturnsOriginalLengthAndNoopWhenNothingRegistered(t *t
 
 func TestClientErrorScrub_ReportedWriteLengthMatchesInput(t *testing.T) {
 	raw := &rawCaptureWriter{}
-	in := `{"error":{"message":"gpt-6-luna"}}`
+	in := `{"error":{"message":"gpt-6-luna at https://relay.example-upstream.com/v1"}}`
 	r := setupScrubRouter(raw, func(c *gin.Context) {
 		c.Status(http.StatusBadRequest)
 		n, err := c.Writer.Write([]byte(in))
@@ -99,5 +107,7 @@ func TestClientErrorScrub_ReportedWriteLengthMatchesInput(t *testing.T) {
 	})
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/x", nil))
-	require.Contains(t, w.Body.String(), "gpt-6.1-sol")
+	require.Contains(t, w.Body.String(), "gpt-6-luna")
+	require.Contains(t, w.Body.String(), "upstream")
+	require.NotContains(t, w.Body.String(), "relay.example-upstream.com")
 }

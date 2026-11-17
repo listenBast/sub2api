@@ -446,7 +446,6 @@ func setOpsRequestContext(c *gin.Context, model string, stream bool) {
 	model = strings.TrimSpace(model)
 	c.Set(opsModelKey, model)
 	c.Set(opsStreamKey, stream)
-	service.RegisterClientScrubRequestedModel(c, model)
 	if c.Request != nil && model != "" {
 		ctx := context.WithValue(c.Request.Context(), ctxkey.Model, model)
 		c.Request = c.Request.WithContext(ctx)
@@ -461,14 +460,13 @@ func setOpsEndpointContext(c *gin.Context, upstreamModel string, requestType int
 	}
 	if upstreamModel = strings.TrimSpace(upstreamModel); upstreamModel != "" {
 		c.Set(opsUpstreamModelKey, upstreamModel)
-		service.RegisterClientScrubUpstreamModel(c, upstreamModel)
 	}
 	c.Set(opsRequestTypeKey, requestType)
 }
 
 // setOpsSelectedAccountFor records the selected account for ops attribution and
-// registers its routing details (mapped model, custom base URL, name) with the
-// client-error scrubber so upstream errors never leak them to API callers.
+// registers its custom base URL and account name with the client-error scrubber
+// so upstream errors never leak those routing details to API callers.
 func setOpsSelectedAccountFor(c *gin.Context, account *service.Account) {
 	if c == nil || account == nil {
 		return
