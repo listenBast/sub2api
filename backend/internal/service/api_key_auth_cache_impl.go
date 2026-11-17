@@ -16,7 +16,7 @@ import (
 
 // 注意（fork）：上游每次递增该版本号时，合并后需要保留 +100 的偏移，
 // 确保二开新增的 balance_mode / team_balance 字段总能触发快照重建。
-const apiKeyAuthSnapshotVersion = 127 // v27: group require_privacy_set (OpenAI scheduling reads it from ctx); +100 fork: api key balance_mode + user team_balance
+const apiKeyAuthSnapshotVersion = 128 // v28: group force_openai_ultrafast (OpenAI gateway reads it from ctx); +100 fork: api key balance_mode + user team_balance
 
 type apiKeyAuthCacheConfig struct {
 	l1Size        int
@@ -425,6 +425,7 @@ func (s *APIKeyService) snapshotFromAPIKey(ctx context.Context, apiKey *APIKey) 
 			AllowMessagesDispatch:           apiKey.Group.AllowMessagesDispatch,
 			AllowLive:                       apiKey.Group.AllowLive,
 			ForceOpenAIFast:                 apiKey.Group.ForceOpenAIFast,
+			ForceOpenAIUltrafast:            apiKey.Group.ForceOpenAIUltrafast,
 			FreeOpenAIFast:                  apiKey.Group.FreeOpenAIFast,
 			DefaultMappedModel:              apiKey.Group.DefaultMappedModel,
 			MessagesDispatchModelConfig:     apiKey.Group.MessagesDispatchModelConfig,
@@ -532,6 +533,7 @@ func (s *APIKeyService) snapshotToAPIKey(key string, snapshot *APIKeyAuthSnapsho
 			AllowMessagesDispatch:           snapshot.Group.AllowMessagesDispatch,
 			AllowLive:                       snapshot.Group.AllowLive,
 			ForceOpenAIFast:                 snapshot.Group.ForceOpenAIFast,
+			ForceOpenAIUltrafast:            snapshot.Group.ForceOpenAIUltrafast,
 			FreeOpenAIFast:                  snapshot.Group.FreeOpenAIFast,
 			DefaultMappedModel:              snapshot.Group.DefaultMappedModel,
 			MessagesDispatchModelConfig:     snapshot.Group.MessagesDispatchModelConfig,
