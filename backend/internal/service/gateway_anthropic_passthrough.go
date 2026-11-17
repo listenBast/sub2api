@@ -253,7 +253,6 @@ func (s *GatewayService) forwardAnthropicAPIKeyPassthroughWithInput(
 	var usage *ClaudeUsage
 	var firstTokenMs *int
 	var clientDisconnect bool
-	setAnthropicPublicModel(c, input.OriginalModel, input.RequestModel)
 	if input.RequestStream {
 		streamResult, err := s.handleStreamingResponseAnthropicAPIKeyPassthrough(ctx, resp, c, account, input.StartTime, input.RequestModel)
 		if err != nil {
@@ -410,7 +409,6 @@ func (s *GatewayService) handleStreamingResponseAnthropicAPIKeyPassthrough(
 	if !ok {
 		return nil, errors.New("streaming not supported")
 	}
-	publicModel := anthropicPublicModel(c)
 
 	usage := &ClaudeUsage{}
 	var firstTokenMs *int
@@ -570,7 +568,7 @@ func (s *GatewayService) handleStreamingResponseAnthropicAPIKeyPassthrough(
 			}
 
 			if !clientDisconnected {
-				restored := reverseToolNamesIfPresentString(c, rewriteAnthropicSSELineModel(line, publicModel))
+				restored := reverseToolNamesIfPresentString(c, line)
 				if _, err := io.WriteString(w, restored); err != nil {
 					clientDisconnected = true
 					logger.LegacyPrintf("service.gateway", "[Anthropic passthrough] Client disconnected during streaming, continue draining upstream for usage: account=%d", account.ID)
@@ -904,7 +902,6 @@ func (s *GatewayService) handleNonStreamingResponseAnthropicAPIKeyPassthrough(
 		contentType = "application/json"
 	}
 	body = restoreCompositeClientModel(ctx, body)
-	body = rewriteAnthropicBodyModel(body, anthropicPublicModel(c))
 	body = reverseToolNamesIfPresent(c, body)
 	c.Data(resp.StatusCode, contentType, body)
 	return usage, nil

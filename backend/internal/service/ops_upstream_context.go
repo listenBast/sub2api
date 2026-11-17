@@ -96,7 +96,6 @@ func SetOpsUpstreamModel(c *gin.Context, model string) {
 	}
 	if model = strings.TrimSpace(model); model != "" {
 		c.Set(OpsUpstreamModelKey, model)
-		RegisterClientScrubUpstreamModel(c, model)
 	}
 }
 
