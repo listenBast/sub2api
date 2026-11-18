@@ -1048,6 +1048,7 @@ func ProvideChannelMonitorService(
 ) *ChannelMonitorService {
 	svc := NewChannelMonitorService(repo, encryptor)
 	svc.SetRuntimeReader(settingService)
+	configureMonitorSelfHosts(settingService)
 	return svc
 }
 
