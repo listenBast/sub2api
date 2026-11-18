@@ -43,6 +43,11 @@ var monitorDialer = &net.Dialer{
 	KeepAlive: monitorDialKeepAlive,
 }
 
+// lookupMonitorIPs resolves a hostname for SSRF checks. Tests stub this.
+var lookupMonitorIPs = func(ctx context.Context, hostname string) ([]net.IPAddr, error) {
+	return net.DefaultResolver.LookupIPAddr(ctx, hostname)
+}
+
 // mustParseCIDRs 在包初始化时解析 CIDR 字符串，失败 panic。
 func mustParseCIDRs(cidrs []string) []*net.IPNet {
 	out := make([]*net.IPNet, 0, len(cidrs))
@@ -89,12 +94,11 @@ func isPrivateOrLoopbackHost(ctx context.Context, hostname string) (bool, error)
 	if isBlockedHostname(hostname) {
 		return true, nil
 	}
-	// IP 字面量直接判断。
+	// IP 字面量直接判断，永不走自家域名例外。
 	if ip := net.ParseIP(hostname); ip != nil {
 		return isPrivateIP(ip), nil
 	}
-	resolver := net.DefaultResolver
-	addrs, err := resolver.LookupIPAddr(ctx, hostname)
+	addrs, err := lookupMonitorIPs(ctx, hostname)
 	if err != nil {
 		return false, err
 	}
@@ -102,7 +106,7 @@ func isPrivateOrLoopbackHost(ctx context.Context, hostname string) (bool, error)
 		return true, nil
 	}
 	for _, a := range addrs {
-		if isPrivateIP(a.IP) {
+		if monitorDestinationBlocked(hostname, a.IP) {
 			return true, nil
 		}
 	}
@@ -126,7 +130,7 @@ func safeDialContext(ctx context.Context, network, address string) (net.Conn, er
 	if isBlockedHostname(host) {
 		return nil, &net.AddrError{Err: "blocked by SSRF policy", Addr: address}
 	}
-	addrs, err := net.DefaultResolver.LookupIPAddr(ctx, host)
+	addrs, err := lookupMonitorIPs(ctx, host)
 	if err != nil {
 		return nil, err
 	}
@@ -135,7 +139,7 @@ func safeDialContext(ctx context.Context, network, address string) (net.Conn, er
 	}
 	var lastErr error
 	for _, a := range addrs {
-		if isPrivateIP(a.IP) {
+		if monitorDestinationBlocked(host, a.IP) {
 			lastErr = &net.AddrError{Err: "blocked by SSRF policy", Addr: a.IP.String()}
 			continue
 		}

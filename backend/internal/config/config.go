@@ -110,9 +110,20 @@ type Config struct {
 	BatchImage              BatchImageConfig              `mapstructure:"batch_image"`
 	ImageStorage            ImageStorageConfig            `mapstructure:"image_storage"`
 	Plugins                 PluginConfig                  `mapstructure:"plugins"`
+	ChannelMonitor          ChannelMonitorConfig          `mapstructure:"channel_monitor"`
 
 	// Enforce only API-key spending windows in simple mode.
 	SimpleModeKeyRateLimitEnabled bool `mapstructure:"simple_mode_key_rate_limit_enabled" yaml:"simple_mode_key_rate_limit_enabled"`
+}
+
+// ChannelMonitorConfig holds operator settings for the channel-monitor feature.
+type ChannelMonitorConfig struct {
+	// SelfHosts is an exact-hostname allowlist (or https URLs from which the
+	// hostname is taken). When a listed public site hostname resolves to
+	// RFC1918/ULA addresses inside the deployment network, monitor probes may
+	// use those addresses. IP literals, loopback, and link-local/metadata
+	// addresses are never admitted.
+	SelfHosts []string `mapstructure:"self_hosts"`
 }
 
 // SimpleModeConfig controls startup behavior in simple mode.
@@ -2019,6 +2030,7 @@ func load(allowMissingJWTSecret bool) (*Config, error) {
 	cfg.OIDC.ValidateIDTokenExplicit = hasExplicitConfigOrEnv("oidc_connect.validate_id_token", "OIDC_CONNECT_VALIDATE_ID_TOKEN")
 	cfg.Dashboard.KeyPrefix = strings.TrimSpace(cfg.Dashboard.KeyPrefix)
 	cfg.CORS.AllowedOrigins = normalizeStringSlice(cfg.CORS.AllowedOrigins)
+	cfg.ChannelMonitor.SelfHosts = normalizeStringSlice(cfg.ChannelMonitor.SelfHosts)
 	cfg.Security.ResponseHeaders.AdditionalAllowed = normalizeStringSlice(cfg.Security.ResponseHeaders.AdditionalAllowed)
 	cfg.Security.ResponseHeaders.ForceRemove = normalizeStringSlice(cfg.Security.ResponseHeaders.ForceRemove)
 	cfg.Security.CSP.Policy = strings.TrimSpace(cfg.Security.CSP.Policy)
@@ -2175,6 +2187,7 @@ func setDefaults() {
 	viper.SetDefault("cors.allowed_origins", []string{})
 	viper.SetDefault("cors.allow_credentials", true)
 	viper.SetDefault("mcp.public_url", "")
+	viper.SetDefault("channel_monitor.self_hosts", []string{})
 
 	// WebAuthn / Passkeys are opt-in because every deployment must explicitly
 	// declare its relying-party domain and trusted browser origins.

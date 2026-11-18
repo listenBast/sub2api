@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -35,7 +36,30 @@ func newSSRFSafeHTTPClient(timeout time.Duration) *http.Client {
 		TLSHandshakeTimeout:   monitorTLSHandshakeTimeout,
 		ResponseHeaderTimeout: monitorResponseHeaderTimeout,
 	}
-	return &http.Client{Timeout: timeout, Transport: servertiming.WrapRoundTripper(tr)}
+	return &http.Client{
+		Timeout:   timeout,
+		Transport: servertiming.WrapRoundTripper(tr),
+		// Re-evaluate every hop by hostname. A self-host exception must not
+		// follow a redirect to a different host or a private IP literal.
+		CheckRedirect: monitorSSRFCheckRedirect,
+	}
+}
+
+// monitorSSRFCheckRedirect rejects redirects whose target is a private IP
+// literal (no self-host exception). Named-host hops are still dialed through
+// safeDialContext, which applies the allowlist only to the hop's own hostname.
+func monitorSSRFCheckRedirect(req *http.Request, via []*http.Request) error {
+	if len(via) >= 10 {
+		return errors.New("stopped after 10 redirects")
+	}
+	if req == nil || req.URL == nil {
+		return errors.New("redirect missing URL")
+	}
+	host := req.URL.Hostname()
+	if ip := net.ParseIP(host); ip != nil && isPrivateIP(ip) {
+		return &net.AddrError{Err: "blocked by SSRF policy", Addr: host}
+	}
+	return nil
 }
 
 // CheckOptions 承载一次检测的自定义入参。
