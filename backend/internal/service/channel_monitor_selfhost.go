@@ -179,5 +179,5 @@ func monitorDestinationBlocked(hostname string, ip net.IP) bool {
 	if net.ParseIP(hostname) != nil {
 		return true
 	}
-	return !(isSelfMonitorHost(hostname) && isRFC1918OrULA(ip))
+	return !isSelfMonitorHost(hostname) || !isRFC1918OrULA(ip)
 }
