@@ -609,6 +609,14 @@ func (s *OpenAIGatewayService) calculateOpenAIRecordUsageCost(
 	modelLongContextExempt bool,
 	pricingAt time.Time,
 ) (*CostBreakdown, error) {
+	if q, ok := walletQuote(ctx); ok {
+		if q.Kind != "alpha-search" || result == nil || result.WebSearchCalls != 1 || apiKey == nil || apiKey.ID != q.APIKeyID {
+			return nil, ErrBillingServiceUnavailable
+		}
+		cost := q.Cost
+		return &cost, nil
+	}
+
 	billingModel := firstUsageBillingModel(billingModels)
 	if result != nil && result.WebSearchCalls > 0 {
 		// Codex alpha/search 网页搜索按次计费：上游不返回 usage/token 字段，单价只取

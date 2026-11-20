@@ -109,17 +109,18 @@ func (h *OpenAIGatewayHandler) AlphaSearch(c *gin.Context) {
 		return
 	}
 
-	// 余额模式在途预留（与计费同口径估算；计费任务扣减余额缓存后才释放）。
-	inflightDone, inflightErr := reserveInflightBalance(c, h.billingCacheService, h.gatewayService, apiKey, subscription, service.InflightEstimateRequest{Model: requestedModel, BodyBytes: len(body), MaxTokens: requestMaxOutputTokens(body), Kind: service.InflightEstimateToken, SearchCalls: 1})
-	if inflightErr != nil {
-		status, code, message, retryAfter := billingErrorDetails(inflightErr)
+	// Alpha search is a fixed one-call price, not an estimated token charge.
+	walletCtx, walletRequest, walletErr := h.gatewayService.BeginAlphaSearchWallet(c.Request.Context(), apiKey, subscription, body, h.apiKeyService)
+	if walletErr != nil {
+		status, code, message, retryAfter := billingErrorDetails(walletErr)
 		if retryAfter > 0 {
 			c.Header("Retry-After", strconv.Itoa(retryAfter))
 		}
 		h.errorResponse(c, status, code, message)
 		return
 	}
-	defer inflightDone()
+	c.Request = c.Request.WithContext(walletCtx)
+	defer walletRequest.Done()
 
 	searchID := strings.TrimSpace(gjson.GetBytes(body, "id").String())
 	sessionHash := h.gatewayService.GenerateSessionHashWithFallback(c, nil, searchID)
@@ -130,6 +131,7 @@ func (h *OpenAIGatewayHandler) AlphaSearch(c *gin.Context) {
 	switchCount := 0
 	var oauth429FailoverState service.OpenAIOAuth429FailoverState
 	routingStart := time.Now()
+	walletNetworkAttempts := 0
 
 	// 分组利润控制：alpha search 文本入口请求级装门并固定 pricingAt
 	//（记录路径经 service.OpenAIPricingAtFromContext 从请求 ctx 回读）。
@@ -190,6 +192,15 @@ func (h *OpenAIGatewayHandler) AlphaSearch(c *gin.Context) {
 		writerSizeBeforeForward := c.Writer.Size()
 		forwardStart := time.Now()
 		var result *service.OpenAIForwardResult
+		if err := walletRequest.BeforeDispatch(c.Request.Context()); err != nil {
+			if accountRelease != nil {
+				accountRelease()
+			}
+			status, code, message, _ := billingErrorDetails(err)
+			h.errorResponse(c, status, code, message)
+			return
+		}
+		walletNetworkAttempts++
 		result, err = func() (*service.OpenAIForwardResult, error) {
 			if accountRelease != nil {
 				defer accountRelease()
@@ -198,6 +209,11 @@ func (h *OpenAIGatewayHandler) AlphaSearch(c *gin.Context) {
 		}()
 		service.SetOpsLatencyMs(c, service.OpsResponseLatencyMsKey, time.Since(forwardStart).Milliseconds())
 
+		if err == nil && result == nil && c.Writer.Status() >= http.StatusMultipleChoices && walletNetworkAttempts == 1 {
+			if releaseErr := walletRequest.ConfirmHTTPFailure(); releaseErr != nil {
+				reqLog.Warn("alpha_search.wallet_confirmed_failure_refund_pending", zap.Error(releaseErr))
+			}
+		}
 		if err == nil {
 			h.gatewayService.ReportOpenAIAccountScheduleResult(account, openAIAccountScheduleModel(c, account, requestedModel, false, result), true, nil)
 			if result != nil {

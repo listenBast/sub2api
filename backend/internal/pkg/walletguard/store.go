@@ -22,6 +22,7 @@ var (
 type Store struct{ DB *sql.DB }
 
 type Request struct {
+	APIKeyID    int64
 	ID          string
 	UserID      int64
 	Fingerprint string
@@ -96,16 +97,22 @@ func (s Store) Reserve(ctx context.Context, r Request) (out Result, err error) {
 	if err != nil {
 		return out, err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	var pText, tText string
 	var member bool
-	err = tx.QueryRowContext(ctx, `SELECT balance::text, COALESCE(team_balance,0)::text,
- EXISTS(SELECT 1 FROM team_memberships tm JOIN teams t ON t.id=tm.team_id
- WHERE tm.user_id=u.id AND tm.status IN ('active','exit_pending') AND t.status='active')
- FROM users u WHERE u.id=$1 AND u.deleted_at IS NULL FOR UPDATE`, r.UserID).Scan(&pText, &tText, &member)
+	err = tx.QueryRowContext(ctx, `SELECT balance::text,COALESCE(team_balance,0)::text FROM users WHERE id=$1 AND deleted_at IS NULL FOR UPDATE`, r.UserID).Scan(&pText, &tText)
 	if err != nil {
 		return out, err
 	}
+	// Read membership in a FRESH statement after obtaining the wallet lock; a
+	// membership change committed while waiting cannot leave a stale EXISTS result.
+	var teamID sql.NullInt64
+	err = tx.QueryRowContext(ctx, `SELECT tm.team_id FROM team_memberships tm JOIN teams t ON t.id=tm.team_id
+ WHERE tm.user_id=$1 AND tm.status IN ('active','exit_pending') AND t.status='active' FOR SHARE OF tm,t`, r.UserID).Scan(&teamID)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return out, err
+	}
+	member = teamID.Valid
 	// Historical negative balances are blocked, never normalized or forgiven.
 	if strings.HasPrefix(pText, "-") || strings.HasPrefix(tText, "-") {
 		return out, ErrInsufficient
@@ -132,9 +139,9 @@ func (s Store) Reserve(ctx context.Context, r Request) (out Result, err error) {
 		return Result{}, err
 	}
 	res, err := tx.ExecContext(ctx, `INSERT INTO wallet_reservations
- (request_id,user_id,fingerprint,pricing_digest,balance_mode,personal_units,team_units)
- VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(request_id) DO NOTHING`,
-		r.ID, r.UserID, r.Fingerprint, r.PricingDigest, r.Mode, out.PersonalHeld, out.TeamHeld)
+ (request_id,user_id,fingerprint,pricing_digest,balance_mode,personal_units,team_units,api_key_id,team_id)
+ VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT(request_id) DO NOTHING`,
+		r.ID, r.UserID, r.Fingerprint, r.PricingDigest, r.Mode, out.PersonalHeld, out.TeamHeld, r.APIKeyID, teamID)
 	if err != nil {
 		return Result{}, err
 	}
@@ -178,7 +185,7 @@ func (s Store) Finalize(ctx context.Context, userID int64, id string, actual Amo
 	if err != nil {
 		return out, err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	out, err = s.FinalizeTx(ctx, tx, userID, id, actual, release)
 	if err != nil {
 		return Result{}, err
@@ -201,10 +208,12 @@ func (s Store) FinalizeTx(ctx context.Context, tx *sql.Tx, userID int64, id stri
 		return out, err
 	}
 	var mode string
+	var dispatched sql.NullTime
+	var noCharge sql.NullString
 	var recorded, spentP, spentT sql.NullInt64
-	err = tx.QueryRowContext(ctx, `SELECT balance_mode,personal_units,team_units,state,actual_units,spent_personal_units,spent_team_units
+	err = tx.QueryRowContext(ctx, `SELECT balance_mode,personal_units,team_units,state,actual_units,spent_personal_units,spent_team_units,dispatched_at,no_charge_reason
  FROM wallet_reservations WHERE request_id=$1 AND user_id=$2 FOR UPDATE`, id, userID).
-		Scan(&mode, &out.PersonalHeld, &out.TeamHeld, &out.State, &recorded, &spentP, &spentT)
+		Scan(&mode, &out.PersonalHeld, &out.TeamHeld, &out.State, &recorded, &spentP, &spentT, &dispatched, &noCharge)
 	if errors.Is(err, sql.ErrNoRows) {
 		return out, ErrMissing
 	}
@@ -222,6 +231,9 @@ func (s Store) FinalizeTx(ctx context.Context, tx *sql.Tx, userID int64, id stri
 			return out, nil
 		}
 		return Result{}, ErrConflict
+	}
+	if release && dispatched.Valid && !noCharge.Valid {
+		return Result{}, ErrDispatched
 	}
 	total, err := add(out.PersonalHeld, out.TeamHeld)
 	if err != nil {
@@ -250,4 +262,109 @@ func (s Store) FinalizeTx(ctx context.Context, tx *sql.Tx, userID int64, id stri
 	out.State = target
 	out.Changed = true
 	return out, nil
+}
+
+// ErrDispatched means a no-charge release is not proven safe. An upstream timeout
+// or disconnect is not evidence that the upstream did no billable work.
+var ErrDispatched = errors.New("walletguard: dispatched outcome needs reconciliation; automatic release refused")
+
+// MarkDispatched is durable BEFORE the first network send. Repeated calls are
+// safe for bounded internal failover under the same fixed-price invocation.
+func (s Store) MarkDispatched(ctx context.Context, userID int64, id string) error {
+	if s.DB == nil || userID <= 0 || !validText(id) {
+		return ErrInvalid
+	}
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	var user int64
+	if err = tx.QueryRowContext(ctx, `SELECT id FROM users WHERE id=$1 FOR UPDATE`, userID).Scan(&user); err != nil {
+		return err
+	}
+	res, err := tx.ExecContext(ctx, `UPDATE wallet_reservations SET dispatched_at=COALESCE(dispatched_at,now()) WHERE user_id=$1 AND request_id=$2 AND state='reserved'`, userID, id)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n != 1 {
+		return ErrConflict
+	}
+	return tx.Commit()
+}
+
+// ReleaseConfirmedHTTPFailure records a specific non-chargeable protocol outcome
+// and refunds in the same transaction. Never call it on transport/cancellation/
+// timeout errors; those outcomes are unknown and retain their full reservation.
+func (s Store) ReleaseConfirmedHTTPFailure(ctx context.Context, userID int64, id string) (Result, error) {
+	return s.releaseProvenNoCharge(ctx, userID, id, "confirmed_http_non_2xx")
+}
+
+// ReleaseBeforeNetwork may only be used by the live invocation while it can
+// prove it never called the network forwarder. Never infer this after a crash.
+func (s Store) ReleaseBeforeNetwork(ctx context.Context, userID int64, id string) (Result, error) {
+	return s.releaseProvenNoCharge(ctx, userID, id, "confirmed_no_network_send")
+}
+func (s Store) releaseProvenNoCharge(ctx context.Context, userID int64, id, reason string) (Result, error) {
+	if s.DB == nil || userID <= 0 || !validText(id) {
+		return Result{}, ErrInvalid
+	}
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return Result{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	var user int64
+	if err = tx.QueryRowContext(ctx, `SELECT id FROM users WHERE id=$1 FOR UPDATE`, userID).Scan(&user); err != nil {
+		return Result{}, err
+	}
+	if _, err = tx.ExecContext(ctx, `UPDATE wallet_reservations SET no_charge_reason=$3 WHERE request_id=$1 AND user_id=$2 AND state IN ('reserved','released')`, id, userID, reason); err != nil {
+		return Result{}, err
+	}
+	out, err := s.FinalizeTx(ctx, tx, userID, id, 0, true)
+	if err != nil {
+		return Result{}, err
+	}
+	if err = tx.Commit(); err != nil {
+		return Result{}, err
+	}
+	return out, nil
+}
+
+// CheckAvailable is the DB-authoritative floor check for an explicitly free
+// operation. It does not invent a positive charge or reserve money for it.
+func (s Store) CheckAvailable(ctx context.Context, userID int64, mode string) error {
+	if s.DB == nil || userID <= 0 || !validMode(mode) {
+		return ErrInvalid
+	}
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	var pText, tText string
+	var member bool
+	if err = tx.QueryRowContext(ctx, `SELECT balance::text,COALESCE(team_balance,0)::text FROM users WHERE id=$1 AND deleted_at IS NULL FOR UPDATE`, userID).Scan(&pText, &tText); err != nil {
+		return err
+	}
+	if strings.HasPrefix(pText, "-") || strings.HasPrefix(tText, "-") {
+		return ErrInsufficient
+	}
+	p, err := ParseAmount(pText)
+	if err != nil {
+		return err
+	}
+	t, err := ParseAmount(tText)
+	if err != nil {
+		return err
+	}
+	if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM team_memberships tm JOIN teams t ON t.id=tm.team_id WHERE tm.user_id=$1 AND tm.status IN ('active','exit_pending') AND t.status='active')`, userID).Scan(&member); err != nil {
+		return err
+	}
+	_, _, err = split(p, t, member, mode, 1)
+	return err
 }

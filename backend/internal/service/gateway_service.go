@@ -1458,6 +1458,9 @@ func (s *GatewayService) DoGrokNativeResponsesJSON(ctx context.Context, account 
 		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusPaymentRequired || resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500 {
 			return nil, &UpstreamFailoverError{StatusCode: resp.StatusCode, ResponseBody: respBytes}
 		}
+		if resp.StatusCode == http.StatusBadRequest || resp.StatusCode == http.StatusUnprocessableEntity {
+			return nil, &ConfirmedSearchHTTPRejection{Message: fmt.Sprintf("grok upstream %d: %s", resp.StatusCode, msg)}
+		}
 		return nil, fmt.Errorf("grok upstream %d: %s", resp.StatusCode, msg)
 	}
 	return respBytes, nil

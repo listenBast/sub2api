@@ -56,6 +56,13 @@ func (r *usageBillingRepository) ApplyBatch(ctx context.Context, cmds []*service
 		return nil, err
 	}
 
+	for _, cmd := range cmds {
+		if cmd.WalletReservationID != "" {
+			if err := r.EnqueueWalletBilling(ctx, cmd); err != nil {
+				return nil, err
+			}
+		}
+	}
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
@@ -90,6 +97,13 @@ func (r *usageBillingRepository) ApplyBatch(ctx context.Context, cmds []*service
 		return nil, err
 	}
 
+	for i, cmd := range cmds {
+		if !applied[i] && cmd.WalletReservationID != "" {
+			if err := settleReservedWallet(ctx, tx, cmd, &service.UsageBillingApplyResult{}, true); err != nil {
+				return nil, err
+			}
+		}
+	}
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
@@ -355,6 +369,12 @@ func applyUsageBillingBatchBalance(ctx context.Context, tx *sql.Tx, userID int64
 	// the user row after subscriptions. BalanceMode may differ per key, so
 	// a single summed UPDATE cannot reproduce the same split.
 	for _, i := range group.indexes {
+		if cmds[i].WalletReservationID != "" {
+			if err := settleReservedWallet(ctx, tx, cmds[i], outcomes[i].Result, false); err != nil {
+				return err
+			}
+			continue
+		}
 		newBalance, sufficient, err := deductTeamAwareUsageBillingBalance(ctx, tx, cmds[i], outcomes[i].Result)
 		if err != nil {
 			return err

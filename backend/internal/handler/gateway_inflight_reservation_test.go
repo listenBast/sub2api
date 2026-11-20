@@ -163,8 +163,9 @@ func TestWrapUsageRecordTaskContext_HandsReservationToBillingTask(t *testing.T) 
 	require.Equal(t, 0, cache.count())
 }
 
-// 新接入的端点（独立 web_search）：在途预留超过余额时拒绝，且不残留预留。
-func TestWebSearch_RejectsWhenInflightExceedsBalance(t *testing.T) {
+// Standalone search must not fall back to Redis estimates when the durable
+// wallet provider is unavailable, even when Redis has an apparently funded user.
+func TestWebSearch_FailsClosedWithoutDurableWalletProvider(t *testing.T) {
 	cache := newHandlerInflightCache(1.5)
 	cfg := &config.Config{}
 	cfg.Billing.InflightReservation = config.InflightReservationConfig{Enabled: true, TTLSeconds: 60}
@@ -198,7 +199,7 @@ func TestWebSearch_RejectsWhenInflightExceedsBalance(t *testing.T) {
 
 	h.WebSearch(c)
 
-	require.NotEqual(t, http.StatusOK, w.Code)
-	require.Contains(t, w.Body.String(), "balance")
+	require.Equal(t, http.StatusServiceUnavailable, w.Code)
+	require.Contains(t, w.Body.String(), "billing_service_error")
 	require.Equal(t, 1, cache.count(), "rejected request must not leave a reservation behind")
 }

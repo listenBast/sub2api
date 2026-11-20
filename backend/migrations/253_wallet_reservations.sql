@@ -4,6 +4,11 @@
 CREATE TABLE IF NOT EXISTS wallet_reservations (
     request_id text PRIMARY KEY CHECK (length(request_id) BETWEEN 1 AND 200),
     user_id bigint NOT NULL REFERENCES users(id),
+    api_key_id bigint NOT NULL DEFAULT 0,
+    team_id bigint,
+    dispatched_at timestamptz,
+    no_charge_reason text,
+    billing_receipt jsonb,
     fingerprint text NOT NULL CHECK (length(fingerprint) BETWEEN 1 AND 200),
     pricing_digest text NOT NULL CHECK (length(pricing_digest) BETWEEN 1 AND 200),
     balance_mode text NOT NULL CHECK (balance_mode IN ('personal_only','team_only','personal_first','team_first')),
@@ -31,3 +36,15 @@ CREATE TABLE IF NOT EXISTS wallet_reservations (
 );
 CREATE INDEX IF NOT EXISTS wallet_reservations_pending_user_idx
     ON wallet_reservations(user_id, created_at) WHERE state = 'reserved';
+
+-- A known successful fixed-price money event is durable before entering the
+-- in-memory billing lanes. Claims are leased; settlement/dedup/delete is atomic.
+CREATE TABLE IF NOT EXISTS wallet_billing_outbox (
+    reservation_id text PRIMARY KEY REFERENCES wallet_reservations(request_id),
+    fingerprint text NOT NULL,
+    command jsonb NOT NULL,
+    attempts integer NOT NULL DEFAULT 0,
+    retry_after timestamptz NOT NULL DEFAULT now(),
+    lease_until timestamptz,
+    created_at timestamptz NOT NULL DEFAULT now()
+);

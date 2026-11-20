@@ -1014,7 +1014,10 @@ func (s *BillingCacheService) minimumBalanceReserve() float64 {
 }
 
 func (s *BillingCacheService) balanceBelowEligibilityThreshold(balance float64) bool {
-	if balance <= 0 {
+	if math.IsNaN(balance) || math.IsInf(balance, 0) {
+		return true
+	}
+	if balance <= 0.1 {
 		return true
 	}
 	minimumReserve := s.minimumBalanceReserve()

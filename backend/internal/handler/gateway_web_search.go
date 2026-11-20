@@ -88,17 +88,17 @@ func (h *GatewayHandler) WebSearch(c *gin.Context) {
 		return
 	}
 
-	// 余额模式在途预留（与计费同口径估算；计费任务扣减余额缓存后才释放）。
-	inflightDone, inflightErr := reserveInflightBalance(c, h.billingCacheService, h.gatewayService, apiKey, subscription, service.InflightEstimateRequest{Model: "grok-" + strings.ReplaceAll(searchLabel, "_", "-"), Kind: service.InflightEstimatePerRequest, SearchCalls: 1})
-	if inflightErr != nil {
-		status, code, message, retryAfter := billingErrorDetails(inflightErr)
+	walletCtx, walletRequest, walletErr := h.gatewayService.BeginStandaloneSearchWallet(c.Request.Context(), apiKey, subscription, "grok-"+strings.ReplaceAll(searchLabel, "_", "-"), req.Query, h.apiKeyService)
+	if walletErr != nil {
+		status, code, message, retryAfter := billingErrorDetails(walletErr)
 		if retryAfter > 0 {
 			c.Header("Retry-After", strconv.Itoa(retryAfter))
 		}
 		c.JSON(status, gin.H{"error": gin.H{"type": code, "message": message}})
 		return
 	}
-	defer inflightDone()
+	c.Request = c.Request.WithContext(walletCtx)
+	defer walletRequest.Done()
 
 	subject, _ := middleware2.GetAuthSubjectFromContext(c)
 	reqLog := requestLogger(c, "handler.gateway.web_search")
@@ -149,6 +149,7 @@ func (h *GatewayHandler) WebSearch(c *gin.Context) {
 		}
 	}()
 
+	walletNetworkAttempts := 0
 	// First attempt + up to 3 failover accounts (max 4 total).
 	for attempt := 0; attempt < 4; attempt++ {
 		selected, selectErr := h.gatewayService.SelectAccountWithLoadAwareness(
@@ -188,6 +189,12 @@ func (h *GatewayHandler) WebSearch(c *gin.Context) {
 		account = selected.Account
 		accountReleaseFunc = release
 
+		if dispatchErr := walletRequest.BeforeDispatch(c.Request.Context()); dispatchErr != nil {
+			status, code, message, _ := billingErrorDetails(dispatchErr)
+			c.JSON(status, gin.H{"error": gin.H{"type": code, "message": message}})
+			return
+		}
+		walletNetworkAttempts++
 		if isXSearch {
 			nativeResp, providerName, err = h.doGrokNativeXSearch(c.Request.Context(), c, account, req, searchModel, maxResults)
 		} else {
@@ -208,6 +215,12 @@ func (h *GatewayHandler) WebSearch(c *gin.Context) {
 		account = nil
 	}
 	if err != nil || nativeResp == nil {
+		var rejected *service.ConfirmedSearchHTTPRejection
+		if walletNetworkAttempts == 1 && errors.As(err, &rejected) {
+			if releaseErr := walletRequest.ConfirmHTTPFailure(); releaseErr != nil {
+				reqLog.Warn("web_search.wallet_rejection_refund_pending", zap.Error(releaseErr))
+			}
+		}
 		msg := "web search failed"
 		if err != nil {
 			msg = err.Error()

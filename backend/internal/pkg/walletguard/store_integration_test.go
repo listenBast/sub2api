@@ -46,7 +46,17 @@ func fixture(t *testing.T) (Store, string) {
 		t.Fatal(err)
 	}
 	db.SetMaxOpenConns(32)
-	t.Cleanup(func() { db.Close(); admin.Exec(`DROP SCHEMA ` + schema + ` CASCADE`); admin.Close() })
+	t.Cleanup(func() {
+		if err := db.Close(); err != nil {
+			t.Error(err)
+		}
+		if _, err := admin.Exec(`DROP SCHEMA ` + schema + ` CASCADE`); err != nil {
+			t.Error(err)
+		}
+		if err := admin.Close(); err != nil {
+			t.Error(err)
+		}
+	})
 	_, err = db.Exec(`CREATE TABLE users(id bigint PRIMARY KEY,balance numeric(20,8) NOT NULL,team_balance numeric(20,8) NOT NULL DEFAULT 0,deleted_at timestamptz,updated_at timestamptz);
  CREATE TABLE teams(id bigint PRIMARY KEY,status text NOT NULL);
  CREATE TABLE team_memberships(user_id bigint PRIMARY KEY REFERENCES users(id),team_id bigint REFERENCES teams(id),status text NOT NULL);
@@ -103,7 +113,11 @@ func TestPostgresConcurrentMultiInstanceAndConservation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer db2.Close()
+	defer func() {
+		if err := db2.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
 	db2.SetMaxOpenConns(16)
 	stores := []Store{s, {DB: db2}}
 	var granted atomic.Int32
@@ -150,7 +164,9 @@ func TestPostgresSettleReleaseReplayAndOverflow(t *testing.T) {
 	}
 	balances(t, s, 1, "0.5", "0")
 	var state string
-	s.DB.QueryRow(`SELECT state FROM wallet_reservations WHERE request_id=$1`, r.ID).Scan(&state)
+	if err := s.DB.QueryRow(`SELECT state FROM wallet_reservations WHERE request_id=$1`, r.ID).Scan(&state); err != nil {
+		t.Fatal(err)
+	}
 	if state != "reserved" {
 		t.Fatal(state)
 	}
@@ -208,7 +224,9 @@ func TestPostgresAtomicWithUsageAndCancellation(t *testing.T) {
 	if _, err = tx.Exec(`SELECT 1/0`); err == nil {
 		t.Fatal("expected failure")
 	}
-	tx.Rollback()
+	if err := tx.Rollback(); err != nil {
+		t.Fatal(err)
+	}
 	balances(t, s, 1, "0.5", "0")
 	tx, err = s.DB.BeginTx(ctx, nil)
 	if err != nil {
@@ -240,7 +258,11 @@ func TestPostgresConcurrentFinalizationAndNoTTL(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer db2.Close()
+	defer func() {
+		if err := db2.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
 	s2 := Store{DB: db2}
 	if _, err := s2.Reserve(ctx, request("another", 1, "1.00000001", "personal_only")); !errors.Is(err, ErrInsufficient) {
 		t.Fatalf("lost hold: %v", err)
@@ -288,7 +310,9 @@ func TestPostgresHistoricalDebtAndMissingBackendFailClosed(t *testing.T) {
 			t.Fatalf("boundary %s: %v", p, err)
 		}
 	}
-	s.DB.Close()
+	if err := s.DB.Close(); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := s.Reserve(ctx, request("offline", 10, "0.01", "personal_only")); err == nil {
 		t.Fatal("database unavailable granted admission")
 	}
@@ -382,7 +406,11 @@ func TestPostgresConcurrentDuplicateReserveAndConflictingFinalization(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer db2.Close()
+	defer func() {
+		if err := db2.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
 	stores := []Store{s, {DB: db2}}
 	var accepted atomic.Int32
 	var wg sync.WaitGroup
@@ -441,4 +469,44 @@ func TestPostgresConcurrentDuplicateReserveAndConflictingFinalization(t *testing
 	if amount(wallet)+Amount(actual) != amount("2") {
 		t.Fatal("release/settle race lost or duplicated money")
 	}
+}
+
+func TestPostgresFreeAvailabilityFloorAndUnsentMarkerRecovery(t *testing.T) {
+	s, _ := fixture(t)
+	ctx := context.Background()
+	for i, tc := range []struct {
+		p, tm, mode   string
+		member, allow bool
+	}{
+		{"0", "0", "personal_only", false, false}, {"0.1", "0", "personal_only", false, false}, {"0.10000001", "0", "personal_only", false, true}, {"2", "0", "personal_only", false, true},
+		{"5", "0.1", "team_only", true, false}, {"0", "0.10000001", "team_only", true, true}, {"0.06", "0.04", "team_first", true, false}, {"0.06", "0.04000001", "personal_first", true, true},
+	} {
+		id := int64(i + 1)
+		put(t, s, id, tc.p, tc.tm, tc.member)
+		err := s.CheckAvailable(ctx, id, tc.mode)
+		if (err == nil) != tc.allow {
+			t.Fatalf("%+v: %v", tc, err)
+		}
+		balances(t, s, id, tc.p, tc.tm)
+	}
+	put(t, s, 99, "1", "0", false)
+	_, err := s.Reserve(ctx, request("marker-no-send", 99, "0.2", "personal_only"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Simulate a committed dispatch marker whose commit response was lost: the
+	// live caller knows Forward was never invoked and may safely release.
+	if err = s.MarkDispatched(ctx, 99, "marker-no-send"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.Finalize(ctx, 99, "marker-no-send", 0, true); !errors.Is(err, ErrDispatched) {
+		t.Fatal(err)
+	}
+	if _, err = s.ReleaseBeforeNetwork(ctx, 99, "marker-no-send"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.ReleaseBeforeNetwork(ctx, 99, "marker-no-send"); err != nil {
+		t.Fatal(err)
+	}
+	balances(t, s, 99, "1", "0")
 }

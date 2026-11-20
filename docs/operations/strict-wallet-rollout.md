@@ -1,148 +1,167 @@
 # Strict wallet protection — DRAFT / NOT READY TO DEPLOY
 
-## Status and decision
+## Release gate / current implementation
 
-This PR is groundwork, **not a completed anti-overdraft fix**. No production
-request path uses `internal/pkg/walletguard` yet. Existing behavior (including
-existing fail-open paths) remains unchanged. Do not merge/release/deploy this PR
-or run the production repair as if it solved the user's requirement.
+This is now an **integrated but incomplete** implementation, not just a ledger
+prototype. Real Alpha search and standalone Grok web/x search handlers reserve
+funds before forwarding and use the real Apply/ApplyBatch money transaction.
+**The full-site requirement is NOT met. Do not merge, release, deploy or execute
+production repair yet.** Ordinary metered gateways remain legacy paths; they have
+NOT silently been disabled. A nonnegative DB trigger alone cannot fund service
+already delivered through those paths.
 
-The minimal *reliable* design is PostgreSQL exact-money reservation, then usage
-settlement in the same transaction. A cache check below 2, Redis TTL reservations,
-or truncating balances at zero cannot guarantee full collection. The current
-estimator is not a ceiling: it uses body bytes/4, guessed STT duration, default
-max tokens, and a configurable cap. Never pass that estimate as a proven ceiling.
+The chosen design is PostgreSQL exact-money reservation plus atomic finalization,
+not a Redis estimate, a check only below 2, or truncating wallets at zero. The old
+estimator (body bytes/4, guessed STT duration, default output tokens and a cap) is
+not a proven charge ceiling and is never used by the integrated strict routes.
 
-## Production audit privacy
+## Coverage matrix (implementation, not a release claim)
 
-The actual affected IDs, exact debts and before/after balances stay in the
-private operational report, not in this repository. The reviewed cohort has
-sufficient own team quotas and unambiguous membership. Unrelated nonmember and
-negative-team-quota debts are excluded. Never debit the owner's wallet again.
-All fixtures in this PR are synthetic. The correction script requires explicit
-reviewed IDs, team ID and a unique batch ID; amounts are always re-read.
-
-## What the new primitive guarantees (only its own API)
-
-- Integer 10^-8 units; exact numeric strings for wallet updates. No rounding,
-  floats, saturation, unbounded reservation, or silently discarded charges.
-- Serialize all wallets for one user with a PostgreSQL `FOR UPDATE` row lock.
-  Multiple application pools/processes share that lock. Reserve the entire
-  caller-proven ceiling from the selected personal/team pools or fail atomically.
-- Selected spendable funds must be **strictly greater than 0.1**, including at
-  admission after other holds. Both stored pools must be nonnegative. Nonmembers
-  cannot spend team quota. `team_only` without active membership is rejected.
-- A request ID is globally unique. Replayed IDs always return `ErrReplay`; a
-  retry/uncertain commit must never authorize another upstream attempt.
-- Final charge uses the original pool ordering; refund only unused money to the
-  original member pools, even if membership/key mode changed. No owner debit.
-- Settle/release is idempotent for identical outcomes, conflicting outcomes fail.
-  Use `FinalizeTx` in the SAME transaction as usage dedup/log/account/key effects.
-- Charge above ceiling fails with `ErrExceeded` and retains the hold. This is an
-  invariant incident requiring reconciliation, **not a guarantee that an already
-  served over-ceiling request was fully funded**. Therefore proving the ceiling
-  before forwarding is mandatory, and remains unimplemented here.
-- Holds never expire automatically. Client cancellation, stream disconnect,
-  process death or an async queue timeout does not prove that no charge exists.
-  Crash/unknown-outcome holds require durable reconciliation; potentially held
-  funds reduce availability, never create free service.
-- No Redis/cache dependency: cache staleness and Redis errors cannot grant funds
-  in this primitive. DB/schema/validation failures are returned, never fail-open.
-- Conservative supported range: 0 through 92233720368.54775807. Larger database
-  balances are rejected, not clamped. Zero-cost ceilings are not a bypass.
-
-## Missing integration — deployment blockers
-
-The package is intentionally **not connected** until the following are solved:
-
-1. Authoritative immutable price/route snapshot and proven request limits. Start
-   with genuinely fixed-total-price operations, no extra metered charges. Token
-   billing needs exact/safely bounded input including fetched/expanded content,
-   enforced output+reasoning limits, cache writes/reads/storage, context tiers,
-   service-tier/Ultra Fast multipliers and a bound for every failover attempt.
-   Unknown prices or limits must reject *before* forwarding. The current
-   estimator and `PricingDigest` string alone prove none of these properties.
-2. Bind the durable reservation ID to every command, Apply AND ApplyBatch,
-   usage log, retry/fallback and asynchronous worker. Dedup and finalization must
-   be one transaction. A worker cannot deduct wallets again after the reserve.
-3. Durable recovery for lost/dropped billing tasks, unknown upstream outcomes,
-   delayed usage and process restart. A queue callback/refcount alone is unsafe.
-4. Enforce the same availability on transfers, refunds, admin/manual deductions,
-   batch-image `frozen_balance`, legacy `DeductBalance`/`UsageService.Create`, and
-   all other wallet writers. The new primitive is NOT a global DB constraint.
-5. Route-level coverage below, cache/auth invalidation after commit, independent
-   review and representative mocked end-to-end gateway tests. No real paid
-   requests or credentials are needed or allowed for tests.
-
-### Entry-point coverage ledger (all currently NOT integrated)
-
-| Entry/flow | Additional constraint before enabling |
+| Entry / operation | Implemented status and exact scope |
 |---|---|
-|Anthropic messages, OpenAI chat/responses incl. websocket, Gemini generate|bounded tokens/reasoning/cache, tools, multimodal and all mapped/fallback prices|
-|Embeddings/count tokens/SystemOne|bound input expansion and actual billable endpoint behavior|
-|Search, alpha/web search, tool search|bound tool calls and auxiliary charges|
-|Images and edits (incl. async batch)|bound count, input/output token supplements, exact price snapshot; integrate frozen funds|
-|Video/Grok media|bound duration, count, resolution, provider completion/polling and delayed usage|
-|TTS/STT/audio and live/realtime|real duration/unit limits, bounded streaming sessions; bytes-based estimates insufficient|
-|Gemini cached contents|bounded storage duration and mutation lifecycle, not just creation fees|
-|Subscriptions/simple mode|explicitly separate no-wallet semantics; no implicit wallet bypass|
-|Usage ApplyBatch, legacy Create/DeductBalance|same durable request ID, atomic finalization, no alternate debit|
-|Team allocations/transfers/admin/refunds|held funds unavailable; prevent overdrafts on every writer|
+| OpenAI Alpha search | Real handler → immutable per-call price × user/group multiplier → DB reserve → durable dispatch marker → upstream → mandatory detached billing → outbox → Apply/ApplyBatch. Existing customer contract charges exactly one search invocation, not backend token/reasoning/image/service-tier usage. |
+| Standalone Grok web/x search | Real handler → frozen zero-token, SearchCount=1 charge, including any configured per-request fee and search surcharge → same ledger/billing path. Not tool search embedded in a generated conversation. |
+| Explicitly free standalone searches | Freeze zero price too (including a later admin price change); authoritative DB floor check; no artificial positive hold/debit. Unique server invocation ID prevents collapsing identical free requests. |
+| Personal/team funds | All four key modes; DB membership check; debit only own `users.balance` / allocated `users.team_balance`, never an owner's wallet. Team-only cannot use personal money. No new team allocation occurs. |
+| Apply and ApplyBatch | Reserved commands finalize instead of a second debit. Wallet outcome, billing dedup, key/account/subscription effects, exact receipt and outbox deletion share one transaction. Matching duplicate settlement has no further effects. |
+| Asynchronous lane / restart | Persist command before process-local queue; periodic multi-process leased outbox recovery using SKIP LOCKED. Transient settle failure retains command and funds. Missing durable writer never falls back on a reserved path. |
+| Cache / auth | Reserve/refund invalidate balance and auth caches best effort. Reservation permission is always PostgreSQL, never cached approval. Prepaid settlement invalidates, never queues a second Redis subtraction. Recovery of exact-full fixed charges does not change money again. |
+| All wallet DB updates | Migration 254 rejects creation/worsening of negative balances and nonfinite values. Historical debt remains; repayment remains possible. This is defense in depth, NOT prepaid coverage of legacy writers. |
+| Team membership | Original team recorded. Pending team-funded holds block exit/removal/switch/user reassignment; active→exit_pending remains possible. Existing team mutation lock ordering can cause a PostgreSQL deadlock rollback; error is fail-closed, not a funding bypass. |
+| Anthropic messages; OpenAI chat/responses/websockets; Gemini generate | **NOT integrated**: bounded input expansion, output/reasoning, cache, tools, tiers and mapped/failover pricing remain to be implemented. |
+| Embeddings / count tokens / SystemOne | **NOT integrated**: authoritative bounded billable inputs and endpoint-specific charge contract missing. |
+| Images / edits / async image batches | **NOT integrated**: existing `frozen_balance` is separate; count/size/input-output token supplements and async captures must join one ceiling/receipt lifecycle. |
+| Video / Grok media | **NOT integrated**: bounded duration/resolution/count and polling/delayed completion charges missing. |
+| TTS / STT / audio / realtime | **NOT integrated**: enforced real units/duration/session budgets needed; byte estimates are not proof. |
+| Gemini cached contents | **NOT integrated**: bounded storage duration plus mutation/extension/deletion lifecycle needed. |
+| Subscription and simple mode | Explicitly separate existing no-wallet semantics, not a fallback for a failed wallet reserve. Their quota contracts are not replaced by this ledger. |
+| Legacy Create / DeductBalance / unreserved Apply commands | **NOT prepaid**. Existing legacy partial-collection / uncovered-cost policy is NOT repaired by a trigger; cannot claim strict site-wide protection. |
 
-**Compatibility recommendation:** implement bounded fixed-price operations first;
-explicitly reject unbounded metered operations while strict mode is active. This
-would temporarily disable token-priced chat/live/audio/etc. until proven bounds
-are implemented. That is a substantial availability change requiring a concrete
-rollout decision, not something this draft silently deploys. Do not advertise
-strict anti-overdraft while allowing those old paths as a fallback.
+## Exact-money and lifecycle invariants
 
-## Correction script / maintenance plan
+- Ledger amounts are signed 64-bit integer 10^-8 units, and DB wallet changes use
+  exact decimal strings. Current fixed-price billing is quantized ONCE to the
+  existing 8-decimal billing policy, then frozen. No clamp or over-ceiling debit.
+- Lock the user row with PostgreSQL FOR UPDATE across all app instances. Read
+  membership in a fresh statement after acquiring that lock. Take the full
+  selected-pool charge or fail atomically. Both wallets must be nonnegative;
+  selected spendable funds must be **strictly greater than 0.1**, including when
+  another request already holds funds. 0 and 0.1 are rejected; 0.10000001 is only
+  admissible if it also covers the whole charge. No special unsafe bypass at 2.
+- Unique server-generated reservation IDs cannot be supplied by a client. A
+  repeated Reserve returns ErrReplay and never authorizes another forward.
+  Internal failover uses the same one-invocation fixed-price contract/hold.
+- Price and pool order are immutable for settlement. Charges never exceed their
+  fixed invocation hold. The general primitive supports partial refunds to the
+  ORIGINAL pools; the integrated paid searches settle the exact full hold.
+- A durable dispatch marker is written BEFORE invoking the network forwarder.
+  Known pre-forward failures release/refund. A live invocation that never called
+  Forward can release even if a dispatch-marker commit acknowledgement was lost.
+  After a crash that fact cannot be inferred from the marker alone.
+- Alpha's explicit single-attempt non-2xx return and Grok's fully read explicit
+  400/422 rejection refund. Unknown transport failures, cancellation, truncated
+  streams, prior ambiguous attempts or process death **do not auto-refund**.
+  Known terminal success is settled; an ambiguous outcome remains a visible
+  reserved liability pending reconciliation. No TTL creates free service.
+- The outbox recovers already persisted successful billing events, not unknown
+  upstream outcomes. A crash after forwarding but before persisting a success
+  still needs operational reconciliation. There is deliberately no guessed
+  success/timeout settlement or automatic write-off.
+- A final charge exceeding the ceiling fails with ErrExceeded and retains funds.
+  This is an invariant incident, NOT a valid normal policy or evidence that an
+  already served over-ceiling request was funded. Integrated searches pin the
+  exact charge to make this impossible under their declared billing contract.
+- The canonical JSON billing receipt, integer actual/pool split, dedup and
+  counter effects are atomic. The existing presentation `usage_logs` write
+  remains best effort OUTSIDE this transaction; do not describe it as atomic.
+- Conservative supported money range: 0..92233720368.54775807; larger values fail
+  closed. DB/schema/price failures return errors; Redis outage cannot grant money.
 
-`scripts/operations/repair_team_personal_debt_20261120.sql` defaults to a read-only
-snapshot. It is a psql script, not an automatic application migration. It does
-not touch the unrelated historical debts or create team transaction records that
-could be mistaken for new allocations. A separate exact before/after repair
-journal records the correction and proves per-wallet conservation.
+## Remaining precise release decisions / work
 
-Only after gateway coverage is complete and a release/deployment is approved:
+1. **Do not enable strict-site claims while unreserved legacy gateways run.**
+   Finish proven ceilings per endpoint, with local/provider-enforced finite
+   input/output/reasoning/tool/cache/multimodal budgets and a pinned worst-case
+   price across allowed routes. Merely trusting the request's max_tokens, a model
+   name, or a cost-estimator digest is not sufficient.
+2. The least disruptive next implementation is bounded text-only requests on
+   explicitly known model/pricing contracts: reject remote expanded input,
+   unbounded server tools, unsupported media/live/cache-storage types in that
+   strict subset, and impose a finite output+reasoning budget. Use validated
+   model/context/tokenization metadata rather than inventing a byte/token ratio.
+   Image-count billing can follow only where token supplements are excluded or
+   separately bounded. Unknown model/route pricing must reject BEFORE forwarding.
+3. Until those integrations exist, the only immediately provable blanket policy
+   would reject ALL unsupported metered paths. That would substantially disable
+   chat/media/etc.; this draft does NOT silently impose that policy. The precise
+   availability choice is either keep admission closed pending implementation,
+   or explicitly accept a temporary supported-endpoint allowlist. A DB trigger
+   or leaving legacy uncovered-cost collection running is not a third solution.
+4. Ambiguous upstream outcomes require an operational reconciliation source /
+   operator workflow. Do not silently turn retained holds into permanent charges
+   or refund them based only on time. Surface reservation/outbox age and retry
+   counts before any rollout. Independent security/accounting review is needed.
 
-1. Back up using the established `pg_dump -Fc` flow and verify the backup. Retain
-   the old binary. Stop admission and drain/reconcile all old in-flight billing
-   before making corrections. An HTTP handler finishing is not enough.
-2. Re-run the read-only audit. Review any changed membership, added indebted
-   members, insufficient quota or newly negative team wallets; abort on ambiguity.
-3. After explicit maintenance confirmation run psql with both `-v apply=true`
-   and `-v maintenance_confirmed=true`, plus `-v 'reviewed_ids={...}'`,
-   `-v reviewed_team_id=...`, `-v batch_id=...` from the private reviewed report. The script locks memberships/teams and
-   wallets, verifies the explicitly reviewed cohort, computes CURRENT debt,
-   inserts journal rows and applies corrections in a single transaction.
-   Insufficiency, drift, timeout or invariant violation rolls back everything.
-4. Re-running the same batch returns its existing audit rows without any
-   further wallet changes. Later debt requires a NEW reviewed batch, not a reset
-   of the journal. Exact aggregate personal+team assets must be unchanged.
-5. Invalidate affected auth/billing caches only after commit; use the existing
-   application outbox/cache invalidation mechanism once integration is ready.
-   Keep maintenance active until the new binary, invalidation and checks pass.
-6. Deploy with the established `docker cp`/chown/chmod/restart procedure, never
-   compose recreate. Preserve fork VERSION, team features, auth snapshot128,
-   real model names, CoinGecko fail-closed locking and precise SSRF allowlisting.
-   Use `--version` only. No rates/addresses/fees/financial settings are changed.
+## Production audit privacy and correction script
 
-A DB `CHECK balance>=0` cannot simply be validated now: historical debt exists.
-Do not delete that debt or add constraints that break repayment/admin operations
-without an explicit migration strategy.
+Actual affected identities, amounts and before/after balances remain in the
+private operational report, never this public repo. The reviewed cohort has
+sufficient OWN allocated team funds and unambiguous membership. Unrelated
+nonmember debt and historical negative team quotas are excluded. Never debit an
+owner again, infer a different team, forgive debt or create a top-up.
 
-## Local-only tests
+`scripts/operations/repair_team_personal_debt_20261120.sql` defaults to READ ONLY.
+It is a psql operation, not an automatic migration, and has NOT been executed
+against production. It requires explicit reviewed IDs/team/batch, re-reads current
+amounts, rejects drift/insufficiency, locks and transfers matching debt from own
+team allocation into personal balance in ONE transaction. Exact before/after
+journal proves per-user and aggregate conservation. Repeating a committed batch
+is idempotent; new debt needs a new reviewed batch.
 
-```
+Only after all gateway blockers are resolved AND deployment is approved:
+
+1. Keep admission closed; drain/reconcile old requests AND asynchronous charges.
+   Create and verify `pg_dump -Fc` backup, retain the old binary. An HTTP handler
+   finishing alone is not evidence billing drained.
+2. Re-run the read-only audit and review changed membership, newly indebted
+   members, insufficient allocations and pre-existing negative team wallets.
+3. Install/start the approved new binary while maintenance stays active; schema
+   migrations must be present before any strict route or recovery worker runs.
+   Follow the established `docker cp /app/sub2api`, correct `sub2api` ownership,
+   chmod755 and docker restart procedure. NEVER compose recreate (old base image).
+   Use `--version` only. No tags/releases/deployments are performed by this PR.
+4. With explicit maintenance confirmation, execute psql with `-v apply=true`,
+   `-v maintenance_confirmed=true`, `-v 'reviewed_ids={...}'`,
+   `-v reviewed_team_id=...`, `-v batch_id=...` from the private review. Abort on
+   drift/ambiguity. Re-read exact totals/journal and invalidate affected billing /
+   auth caches after commit. Keep maintenance active until all checks pass.
+5. Rollback also keeps admission closed: an old binary does not understand these
+   reservations and cannot safely resume billing while holds exist. Preserve
+   ledger/journals and reconcile; never drop safeguards just to bypass failures.
+
+No version, team functionality, recharge multiplier/address/minimum/fee,
+CoinGecko fail-closed price lock, auth snapshot128, real upstream-model policy or
+exact self-host SSRF allowlisting is intentionally changed.
+
+## Reproducible isolated tests (no paid upstream traffic)
+
+```sh
 cd backend
-WALLETGUARD_TEST_DSN='postgres://box@127.0.0.1:55439/walletguard_test?sslmode=disable' \
-  go test -race -count=1 -v ./internal/pkg/walletguard
+export WALLETGUARD_TEST_DSN='postgres://box@127.0.0.1:55439/walletguard_test?sslmode=disable'
+go test -race -count=3 ./internal/pkg/walletguard ./internal/testutil/walletdb
+go test -tags=unit -race -count=3 ./internal/handler ./internal/repository \
+  -run 'StrictWallet|ReservedWallet'
+go test -tags=unit ./internal/service ./internal/repository \
+  ./internal/server/middleware ./internal/handler
 ```
 
-Integration tests refuse non-loopback hosts or databases not named
-`walletguard_test`, and use isolated schemas. No customer data/API keys/orders or
-real upstream requests are used. Without the DSN those tests SKIP: that is not a
-passing integration verification. Gateway route/retry/streaming/worker/cache
-end-to-end integration tests are still missing. The simulated cancellation,
-restart and transaction tests apply to the ledger only, not the existing gateway.
+Tests require 127.0.0.1 and database name walletguard_test, with isolated schemas.
+Without the DSN PostgreSQL tests SKIP; that is not integration verification. The
+CI workflow provides PostgreSQL17 and runs actual Gin handlers, mock HTTP upstream,
+real repository/Apply/ApplyBatch/outbox and the ledger with race detection.
+Coverage includes 0/.1/.10000001/2, all four funds modes, concurrent multi-connection
+stores, insufficient funds, duplicate/conflicting settlement, over-ceiling error,
+transaction rollback/restart recovery, predispatch failure, explicit rejection,
+failover, SSE interruption, cancellation/unknown holds, mid-flight price changes,
+stale/failed Redis and no second cache deduction. No customer API keys, real
+orders, external billable requests or production writes are used.

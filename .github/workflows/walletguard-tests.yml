@@ -1,9 +1,8 @@
-name: Wallet reservation groundwork
+name: Wallet reservation integrations
 on:
   pull_request:
     paths:
-      - 'backend/internal/pkg/walletguard/**'
-      - 'backend/migrations/253_wallet_reservations.sql'
+      - 'backend/**'
       - 'scripts/operations/repair_team_personal_debt_20261120.sql'
       - '.github/workflows/walletguard-tests.yml'
   workflow_dispatch:
@@ -37,4 +36,6 @@ jobs:
         working-directory: backend
         env:
           WALLETGUARD_TEST_DSN: postgres://postgres:walletguard-ci-fixture-only@127.0.0.1:5432/walletguard_test?sslmode=disable
-        run: go test -race -count=3 -v ./internal/pkg/walletguard
+        run: |
+          go test -race -count=3 -v ./internal/pkg/walletguard ./internal/testutil/walletdb
+          go test -tags=unit -race -count=3 -v ./internal/handler ./internal/repository -run 'StrictWallet|ReservedWallet'

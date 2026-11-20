@@ -66,13 +66,17 @@ func TestRepairAuditApplyIdempotenceConservation(t *testing.T) {
 		t.Fatalf("missing gate %v %s", err, out)
 	}
 	var before, after string
-	s.DB.QueryRow(`SELECT sum(balance+team_balance)::text FROM users WHERE id IN (11,12,13,14)`).Scan(&before)
+	if err := s.DB.QueryRow(`SELECT sum(balance+team_balance)::text FROM users WHERE id IN (11,12,13,14)`).Scan(&before); err != nil {
+		t.Fatal(err)
+	}
 	for i := 0; i < 2; i++ {
 		if out, err := runRepair(t, dsn, true, true); err != nil {
 			t.Fatalf("apply %d %v %s", i, err, out)
 		}
 	}
-	s.DB.QueryRow(`SELECT sum(balance+team_balance)::text FROM users WHERE id IN (11,12,13,14)`).Scan(&after)
+	if err := s.DB.QueryRow(`SELECT sum(balance+team_balance)::text FROM users WHERE id IN (11,12,13,14)`).Scan(&after); err != nil {
+		t.Fatal(err)
+	}
 	if before != after {
 		t.Fatalf("assets changed %s -> %s", before, after)
 	}
@@ -83,16 +87,22 @@ func TestRepairAuditApplyIdempotenceConservation(t *testing.T) {
 	balances(t, s, 23, "50", "0")
 	var debt string
 	var count int
-	s.DB.QueryRow(`SELECT count(*),sum(debt)::text FROM wallet_balance_repairs`).Scan(&count, &debt)
+	if err := s.DB.QueryRow(`SELECT count(*),sum(debt)::text FROM wallet_balance_repairs`).Scan(&count, &debt); err != nil {
+		t.Fatal(err)
+	}
 	if count != 4 || debt != "1.54500000" {
 		t.Fatalf("audit %d %s", count, debt)
 	}
 	var p, tm string
-	s.DB.QueryRow(`SELECT balance::text,team_balance::text FROM users WHERE id=21`).Scan(&p, &tm)
+	if err := s.DB.QueryRow(`SELECT balance::text,team_balance::text FROM users WHERE id=21`).Scan(&p, &tm); err != nil {
+		t.Fatal(err)
+	}
 	if p != "-0.01000000" || tm != "0.00000000" {
 		t.Fatal("nonmember debt changed")
 	}
-	s.DB.QueryRow(`SELECT balance::text,team_balance::text FROM users WHERE id=22`).Scan(&p, &tm)
+	if err := s.DB.QueryRow(`SELECT balance::text,team_balance::text FROM users WHERE id=22`).Scan(&p, &tm); err != nil {
+		t.Fatal(err)
+	}
 	if p != "0.00000000" || tm != "-0.02000000" {
 		t.Fatal("team debt changed")
 	}
@@ -123,12 +133,16 @@ func TestRepairInsufficiencyOrAffiliationDriftRollsBack(t *testing.T) {
 				t.Fatalf("expected SQL safety rejection, got %v %s", err, out)
 			}
 			var personal string
-			s.DB.QueryRow(`SELECT balance::text FROM users WHERE id=11`).Scan(&personal)
+			if err := s.DB.QueryRow(`SELECT balance::text FROM users WHERE id=11`).Scan(&personal); err != nil {
+				t.Fatal(err)
+			}
 			if personal != "-1.20000000" {
 				t.Fatal("partial correction committed")
 			}
 			var exists bool
-			s.DB.QueryRow(`SELECT to_regclass('wallet_balance_repairs') IS NOT NULL`).Scan(&exists)
+			if err := s.DB.QueryRow(`SELECT to_regclass('wallet_balance_repairs') IS NOT NULL`).Scan(&exists); err != nil {
+				t.Fatal(err)
+			}
 			if exists {
 				t.Fatal("failed repair committed DDL/audit")
 			}

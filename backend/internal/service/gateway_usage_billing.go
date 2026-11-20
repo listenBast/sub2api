@@ -218,6 +218,12 @@ func postUsageBilling(ctx context.Context, p *postUsageBillingParams, deps *bill
 }
 
 func resolveUsageBillingRequestID(ctx context.Context, upstreamRequestID string) string {
+	if q, ok := walletQuote(ctx); ok {
+		if q.Units == 0 {
+			return "fixed-free:" + q.ID
+		}
+		return "wallet:" + q.ID
+	}
 	// Forced durable money-event IDs must win over client/local context IDs so
 	// standalone web_search / async video cannot collapse under a reused client id.
 	if requestID := strings.TrimSpace(upstreamRequestID); requestID != "" {
@@ -363,6 +369,31 @@ func applyUsageBilling(ctx context.Context, requestID string, usageLog *UsageLog
 	}
 
 	cmd := buildUsageBillingCommand(requestID, usageLog, p)
+	if q, ok := walletQuote(ctx); ok {
+		if cmd == nil || q.UserID != p.User.ID || q.APIKeyID != p.APIKey.ID || p.IsSubscriptionBill || cmd.BalanceCost != q.Cost.ActualCost {
+			return false, ErrBillingServiceUnavailable
+		}
+		if q.Units > 0 {
+			cmd.RequestID = "wallet:" + q.ID
+			cmd.WalletReservationID = q.ID
+			cmd.WalletActualUnits = int64(q.Units)
+			cmd.RequestFingerprint = ""
+			cmd.Normalize()
+			writer, ok := repo.(interface {
+				EnqueueWalletBilling(context.Context, *UsageBillingCommand) error
+			})
+			if !ok {
+				return false, ErrBillingServiceUnavailable
+			}
+			persistCtx, cancel := detachedBillingContext(ctx)
+			err := writer.EnqueueWalletBilling(persistCtx, cmd)
+			cancel()
+			if err != nil {
+				return false, err
+			}
+		}
+	}
+
 	if cmd == nil || cmd.RequestID == "" || repo == nil {
 		if p.SimpleModeKeyRateLimitOnly {
 			return false, ErrSimpleModeKeyRateLimitBillingUnavailable
@@ -478,6 +509,11 @@ func syncBalanceCacheAfterDeduction(ctx context.Context, p *postUsageBillingPara
 	if p == nil || p.Cost == nil || p.User == nil || deps == nil || deps.billingCacheService == nil {
 		return
 	}
+	if result != nil && result.PrepaidBalance {
+		_ = deps.billingCacheService.InvalidateUserBalance(ctx, p.User.ID)
+		return
+	}
+
 	if result != nil && result.NewBalance != nil && deps.billingCacheService.balanceBelowEligibilityThreshold(*result.NewBalance) {
 		if err := deps.billingCacheService.InvalidateUserBalance(ctx, p.User.ID); err != nil {
 			slog.Warn("invalidate balance cache after exhausted deduction failed",
@@ -788,6 +824,11 @@ func logResponseModelBillingApplied(component string, account *Account, requestI
 // recordUsageCore 是 RecordUsage 的核心实现。
 func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsageCoreInput) error {
 	result := input.Result
+	if q, ok := walletQuote(ctx); ok {
+		if q.Kind != "grok-search" || input.APIKey == nil || input.User == nil || q.APIKeyID != input.APIKey.ID || q.UserID != input.User.ID || result == nil || result.SearchCount != 1 || result.Usage != (ClaudeUsage{}) || result.ImageCount != 0 || result.AudioUsage != nil || result.CacheStorageTokenHours != 0 {
+			return ErrBillingServiceUnavailable
+		}
+	}
 	apiKey := input.APIKey
 	user := input.User
 	account := input.Account
@@ -1048,6 +1089,14 @@ func (s *GatewayService) calculateRecordUsageCost(
 	imageMultiplier float64,
 	pricingAt time.Time,
 ) *CostBreakdown {
+	if q, ok := walletQuote(ctx); ok && q.Kind == "grok-search" {
+		if result == nil || result.SearchCount != 1 || result.Usage != (ClaudeUsage{}) || result.ImageCount != 0 || result.AudioUsage != nil || result.CacheStorageTokenHours != 0 {
+			return nil
+		}
+		cost := q.Cost
+		return &cost
+	}
+
 	// 图片生成：渠道定价为 token 计费时走 token 路径，否则走图片计费。
 	// 分组按张计费开关只对专用图片端点生效，混合请求仍按 token 计费。
 	if result.ImageCount > 0 {
