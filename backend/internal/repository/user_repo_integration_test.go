@@ -70,11 +70,18 @@ func (s *UserRepoSuite) mustCreateUser(u *service.User) *service.User {
 		s.repo = newUserRepositoryWithSQL(s.client, integrationDB)
 		s.T().Cleanup(func() { s.ctx = oldCtx; s.client = oldClient; s.repo = oldRepo })
 		prepareHistoricalWalletTables(s.T(), s.ctx, s.client)
+		// This is a pre-upgrade wallet fixture, not a registration test. Seed the
+		// entity directly: registration would write public auth_identities whose
+		// foreign key correctly refers to public.users, not this TEMP historical row.
+		created, err := s.client.User.Create().SetEmail(u.Email).SetPasswordHash(u.PasswordHash).
+			SetRole(u.Role).SetStatus(u.Status).SetBalance(u.Balance).SetTeamBalance(u.TeamBalance).
+			SetConcurrency(u.Concurrency).Save(s.ctx)
+		s.Require().NoError(err, "seed pre-upgrade historical wallet")
+		applyUserEntityToService(u, created)
+		sealHistoricalWalletTables(s.T(), s.ctx, s.client)
+		return u
 	}
 	s.Require().NoError(s.repo.Create(s.ctx, u), "create user")
-	if historical {
-		sealHistoricalWalletTables(s.T(), s.ctx, s.client)
-	}
 	return u
 }
 
