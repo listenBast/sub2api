@@ -1,0 +1,40 @@
+name: Wallet reservation groundwork
+on:
+  pull_request:
+    paths:
+      - 'backend/internal/pkg/walletguard/**'
+      - 'backend/migrations/253_wallet_reservations.sql'
+      - 'scripts/operations/repair_team_personal_debt_20261120.sql'
+      - '.github/workflows/walletguard-tests.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  postgres-ledger:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: walletguard-ci-fixture-only
+          POSTGRES_DB: walletguard_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd 'pg_isready -U postgres -d walletguard_test'
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+      - name: Ensure psql test client
+        run: command -v psql || (sudo apt-get update && sudo apt-get install -y postgresql-client)
+      - name: Race and PostgreSQL integration tests (no real upstream calls)
+        working-directory: backend
+        env:
+          WALLETGUARD_TEST_DSN: postgres://postgres:walletguard-ci-fixture-only@127.0.0.1:5432/walletguard_test?sslmode=disable
+        run: go test -race -count=3 -v ./internal/pkg/walletguard
