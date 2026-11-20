@@ -35,7 +35,7 @@ not a proven charge ceiling and is never used by the integrated strict routes.
 | TTS / STT / audio / realtime | **NOT integrated**: enforced real units/duration/session budgets needed; byte estimates are not proof. |
 | Gemini cached contents | **NOT integrated**: bounded storage duration plus mutation/extension/deletion lifecycle needed. |
 | Subscription and simple mode | Explicitly separate existing no-wallet semantics, not a fallback for a failed wallet reserve. Their quota contracts are not replaced by this ledger. |
-| Legacy Create / DeductBalance / unreserved Apply commands | **NOT prepaid**. Existing legacy partial-collection / uncovered-cost policy is NOT repaired by a trigger; cannot claim strict site-wide protection. |
+| Legacy Create / DeductBalance / unreserved Apply commands | **NOT prepaid**. DeductBalance now rejects insufficient personal debits atomically (including concurrent writers), with no negative-balance fallback or cross-pool debit. Other legacy partial/uncovered collection is NOT repaired by a trigger; cannot claim strict site-wide protection. |
 
 ## Exact-money and lifecycle invariants
 
@@ -165,3 +165,15 @@ transaction rollback/restart recovery, predispatch failure, explicit rejection,
 failover, SSE interruption, cancellation/unknown holds, mid-flight price changes,
 stale/failed Redis and no second cache deduction. No customer API keys, real
 orders, external billable requests or production writes are used.
+
+### Integration regression migration fixtures
+
+The main Docker-backed integration suite originally asserted that DeductBalance
+must create negative money and seeded "historical" debt AFTER all migrations.
+Those expectations conflict with the new invariants. Tests now assert atomic
+insufficient-debit errors and unchanged funds. Historical cases clone table
+structure into transaction-local TEMP tables, seed debt BEFORE attaching the
+actual installed safeguard functions, then exercise repayment/legacy behavior.
+No production/public trigger is disabled, no test is skipped or assertion removed;
+a separate PostgreSQL regression verifies the fixture still rejects worsening
+historical debt and that the ordinary schema guard remains active.

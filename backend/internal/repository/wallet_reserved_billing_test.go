@@ -4,10 +4,15 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"entgo.io/ent/dialect"
+	entsql "entgo.io/ent/dialect/sql"
+	"errors"
+	dbent "github.com/Wei-Shaw/sub2api/ent"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/walletguard"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/Wei-Shaw/sub2api/internal/testutil/walletdb"
 	"github.com/stretchr/testify/require"
+	"math"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -178,4 +183,84 @@ func TestReservedWalletConcurrentMultiInstanceSingleBatchAndRecovery(t *testing.
 	require.NoError(t, json.Unmarshal(wire, &receipt))
 	require.EqualValues(t, 40000000, receipt.WalletActualUnits)
 	require.Equal(t, original.RequestFingerprint, receipt.RequestFingerprint)
+}
+
+// Historical fixtures model a real upgrade: clone pre-trigger table structure,
+// insert existing debt, then attach the actual installed migration functions.
+// All tables are transaction-local; production/public guards are never disabled.
+func prepareHistoricalWalletTables(t *testing.T, ctx context.Context, q interface {
+	ExecContext(context.Context, string, ...any) (sql.Result, error)
+}) {
+	t.Helper()
+	for _, table := range []string{"users", "teams", "team_memberships", "wallet_reservations"} {
+		_, err := q.ExecContext(ctx, "CREATE TEMP TABLE "+table+" (LIKE "+table+" INCLUDING ALL) ON COMMIT DROP")
+		require.NoError(t, err)
+	}
+}
+func sealHistoricalWalletTables(t *testing.T, ctx context.Context, q interface {
+	ExecContext(context.Context, string, ...any) (sql.Result, error)
+}) {
+	t.Helper()
+	_, err := q.ExecContext(ctx, `CREATE TRIGGER users_reject_wallet_overdraft BEFORE INSERT OR UPDATE OF balance,team_balance ON users FOR EACH ROW EXECUTE FUNCTION reject_wallet_overdraft();
+ CREATE TRIGGER team_membership_reserved_funds BEFORE UPDATE OF team_id,status,user_id OR DELETE ON team_memberships FOR EACH ROW EXECUTE FUNCTION reject_reserved_team_membership_change();`)
+	require.NoError(t, err)
+}
+func TestReservedWalletHistoricalFixtureKeepsRealGuardsEnabled(t *testing.T) {
+	db, _ := walletdb.Open(t)
+	ctx := context.Background()
+	tx, err := db.BeginTx(ctx, nil)
+	require.NoError(t, err)
+	defer func() { _ = tx.Rollback() }()
+	prepareHistoricalWalletTables(t, ctx, tx)
+	_, err = tx.Exec(`INSERT INTO users(id,balance,team_balance) VALUES(1,-1,-0.5)`)
+	require.NoError(t, err)
+	sealHistoricalWalletTables(t, ctx, tx)
+	_, err = tx.Exec(`UPDATE users SET balance=balance+0.1 WHERE id=1`)
+	require.NoError(t, err)
+	// Savepoint lets the fixture verify rejection and then continue reading.
+	_, err = tx.Exec(`SAVEPOINT reject_worsening`)
+	require.NoError(t, err)
+	_, err = tx.Exec(`UPDATE users SET balance=-2 WHERE id=1`)
+	require.Error(t, err)
+	_, err = tx.Exec(`ROLLBACK TO SAVEPOINT reject_worsening`)
+	require.NoError(t, err)
+	var p string
+	require.NoError(t, tx.QueryRow(`SELECT balance::text FROM users WHERE id=1`).Scan(&p))
+	require.Equal(t, "-0.90000000", p)
+	// The ordinary schema still has its own active guard, too.
+	_, err = db.Exec(`INSERT INTO users(id,balance) VALUES(99,-1)`)
+	require.Error(t, err)
+}
+
+func TestReservedWalletLegacyPersonalDebitIsAtomicAndNeverFallsBack(t *testing.T) {
+	db, _ := walletdb.Open(t)
+	ctx := context.Background()
+	_, err := db.Exec(`INSERT INTO users(id,balance,team_balance) VALUES(1,0.3,5)`)
+	require.NoError(t, err)
+	client := dbent.NewClient(dbent.Driver(entsql.OpenDB(dialect.Postgres, db)))
+	repo := newUserRepositoryWithSQL(client, db)
+	var wg sync.WaitGroup
+	var granted atomic.Int32
+	for i := 0; i < 12; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			err := repo.DeductBalance(ctx, 1, .2)
+			if err == nil {
+				granted.Add(1)
+			} else if !errors.Is(err, service.ErrInsufficientBalance) {
+				t.Error(err)
+			}
+		}()
+	}
+	wg.Wait()
+	require.EqualValues(t, 1, granted.Load())
+	for _, bad := range []float64{-1, math.NaN(), math.Inf(1), math.Inf(-1)} {
+		require.Error(t, repo.DeductBalance(ctx, 1, bad))
+	}
+	require.ErrorIs(t, repo.DeductBalance(ctx, 999, .2), service.ErrUserNotFound)
+	var p, tm string
+	require.NoError(t, db.QueryRow(`SELECT balance::text,team_balance::text FROM users WHERE id=1`).Scan(&p, &tm))
+	require.Equal(t, "0.10000000", p)
+	require.Equal(t, "5.00000000", tm)
 }
