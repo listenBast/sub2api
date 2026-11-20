@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 	"time"
@@ -877,33 +878,28 @@ func (r *userRepository) ApplyRedeemBalanceAdjustment(ctx context.Context, id in
 	return nil
 }
 
-// DeductBalance 扣除用户余额
-// 透支策略：允许余额变为负数，确保当前请求能够完成
-// 中间件会阻止余额 <= 0 的用户发起后续请求
+// DeductBalance performs an all-or-nothing debit of available personal funds.
+// It is not gateway admission: metered requests still need a proven prepayment.
 func (r *userRepository) DeductBalance(ctx context.Context, id int64, amount float64) error {
+	if amount < 0 || math.IsNaN(amount) || math.IsInf(amount, 0) {
+		return fmt.Errorf("deduction amount must be finite and nonnegative")
+	}
 	client := clientFromContext(ctx, r.client)
-	n, err := client.User.Update().
-		Where(dbuser.IDEQ(id), dbuser.BalanceGTE(amount)).
-		AddBalance(-amount).
-		Save(ctx)
+	n, err := client.User.Update().Where(dbuser.IDEQ(id), dbuser.BalanceGTE(amount)).AddBalance(-amount).Save(ctx)
 	if err != nil {
 		return err
 	}
 	if n > 0 {
 		return nil
 	}
-
-	n, err = client.User.Update().
-		Where(dbuser.IDEQ(id)).
-		AddBalance(-amount).
-		Save(ctx)
+	exists, err := client.User.Query().Where(dbuser.IDEQ(id)).Exist(ctx)
 	if err != nil {
 		return err
 	}
-	if n == 0 {
+	if !exists {
 		return service.ErrUserNotFound
 	}
-	return nil
+	return service.ErrInsufficientBalance
 }
 
 // DeductAvailableBalance atomically deducts min(amount, max(balance, 0)).

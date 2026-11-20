@@ -61,6 +61,26 @@ func (s *UserRepoSuite) mustCreateUser(u *service.User) *service.User {
 		u.Concurrency = 5
 	}
 
+	historical := u.Balance < 0 || u.TeamBalance < 0
+	if historical {
+		oldCtx, oldClient, oldRepo := s.ctx, s.client, s.repo
+		tx := testEntTx(s.T())
+		s.ctx = dbent.NewTxContext(oldCtx, tx)
+		s.client = tx.Client()
+		s.repo = newUserRepositoryWithSQL(s.client, integrationDB)
+		s.T().Cleanup(func() { s.ctx = oldCtx; s.client = oldClient; s.repo = oldRepo })
+		prepareHistoricalWalletTables(s.T(), s.ctx, s.client)
+		// This is a pre-upgrade wallet fixture, not a registration test. Seed the
+		// entity directly: registration would write public auth_identities whose
+		// foreign key correctly refers to public.users, not this TEMP historical row.
+		created, err := s.client.User.Create().SetEmail(u.Email).SetPasswordHash(u.PasswordHash).
+			SetRole(u.Role).SetStatus(u.Status).SetBalance(u.Balance).SetTeamBalance(u.TeamBalance).
+			SetConcurrency(u.Concurrency).Save(s.ctx)
+		s.Require().NoError(err, "seed pre-upgrade historical wallet")
+		applyUserEntityToService(u, created)
+		sealHistoricalWalletTables(s.T(), s.ctx, s.client)
+		return u
+	}
 	s.Require().NoError(s.repo.Create(s.ctx, u), "create user")
 	return u
 }
@@ -485,14 +505,14 @@ func (s *UserRepoSuite) TestDeductBalance() {
 func (s *UserRepoSuite) TestDeductBalance_InsufficientFunds() {
 	user := s.mustCreateUser(&service.User{Email: "insuf@test.com", Balance: 5})
 
-	// 透支策略：允许扣除超过余额的金额
+	// Insufficient debits reject atomically, without creating debt.
 	err := s.repo.DeductBalance(s.ctx, user.ID, 999)
-	s.Require().NoError(err, "DeductBalance should allow overdraft")
+	s.Require().ErrorIs(err, service.ErrInsufficientBalance)
 
-	// 验证余额变为负数
+	// Verify the rejected debit did not change money.
 	got, err := s.repo.GetByID(s.ctx, user.ID)
 	s.Require().NoError(err)
-	s.Require().InDelta(-994.0, got.Balance, 1e-6, "Balance should be negative after overdraft")
+	s.Require().InDelta(5.0, got.Balance, 1e-6, "insufficient debit must leave all funds unchanged")
 }
 
 func (s *UserRepoSuite) TestDeductBalance_ExactAmount() {
@@ -506,17 +526,17 @@ func (s *UserRepoSuite) TestDeductBalance_ExactAmount() {
 	s.Require().InDelta(0.0, got.Balance, 1e-6)
 }
 
-func (s *UserRepoSuite) TestDeductBalance_AllowsOverdraft() {
+func (s *UserRepoSuite) TestDeductBalance_RejectsOverdraft() {
 	user := s.mustCreateUser(&service.User{Email: "overdraft@test.com", Balance: 5.0})
 
-	// 扣除超过余额的金额 - 应该成功
+	// A debit exceeding available funds must fail.
 	err := s.repo.DeductBalance(s.ctx, user.ID, 10.0)
-	s.Require().NoError(err, "DeductBalance should allow overdraft")
+	s.Require().ErrorIs(err, service.ErrInsufficientBalance)
 
-	// 验证余额为负
+	// Verify all original money remains.
 	got, err := s.repo.GetByID(s.ctx, user.ID)
 	s.Require().NoError(err)
-	s.Require().InDelta(-5.0, got.Balance, 1e-6, "Balance should be -5.0 after overdraft")
+	s.Require().InDelta(5.0, got.Balance, 1e-6, "rejected overdraft must not debit anything")
 }
 
 func (s *UserRepoSuite) TestDeductAvailableBalance_ClampsToNonnegativeBalance() {
@@ -737,12 +757,12 @@ func (s *UserRepoSuite) TestCRUD_And_Filters_And_AtomicUpdates() {
 	s.Require().NoError(err, "GetByID after DeductBalance")
 	s.Require().InDelta(7.5, got4.Balance, 1e-6)
 
-	// 透支策略：允许扣除超过余额的金额
+	// Insufficient debits reject atomically, without creating debt.
 	err = s.repo.DeductBalance(s.ctx, user1.ID, 999)
-	s.Require().NoError(err, "DeductBalance should allow overdraft")
+	s.Require().ErrorIs(err, service.ErrInsufficientBalance)
 	gotOverdraft, err := s.repo.GetByID(s.ctx, user1.ID)
 	s.Require().NoError(err, "GetByID after overdraft")
-	s.Require().Less(gotOverdraft.Balance, 0.0, "Balance should be negative after overdraft")
+	s.Require().InDelta(7.5, gotOverdraft.Balance, 1e-6, "rejected debit leaves funds unchanged")
 
 	s.Require().NoError(s.repo.UpdateConcurrency(s.ctx, user1.ID, 3), "UpdateConcurrency")
 	got5, err := s.repo.GetByID(s.ctx, user1.ID)

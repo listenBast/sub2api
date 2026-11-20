@@ -5,6 +5,7 @@ package service
 import (
 	"context"
 	"errors"
+	"math"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -52,10 +53,10 @@ func TestCheckBillingEligibility_RejectsBalanceBelowMinimumReserve(t *testing.T)
 	require.ErrorIs(t, err, ErrInsufficientBalance)
 }
 
-func TestCheckBillingEligibility_AllowsBalanceAtMinimumReserve(t *testing.T) {
-	cache := &balanceEligibilityCacheStub{balance: 0.01}
+func TestCheckBillingEligibility_AllowsBalanceAtHigherMinimumReserve(t *testing.T) {
+	cache := &balanceEligibilityCacheStub{balance: 0.2}
 	cfg := &config.Config{}
-	cfg.Billing.MinimumBalanceReserve = 0.01
+	cfg.Billing.MinimumBalanceReserve = 0.2
 	svc := NewBillingCacheService(cache, nil, nil, nil, nil, nil, cfg, nil)
 	t.Cleanup(svc.Stop)
 
@@ -125,4 +126,25 @@ func TestSyncBalanceCacheAfterDeduction_QueuesDeductWhenBalanceStillEligible(t *
 	require.Eventually(t, func() bool {
 		return cache.deductCalls.Load() == 1
 	}, 2*time.Second, 10*time.Millisecond)
+}
+
+func TestBalanceFloorBoundaryAndNonfinite(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		balance float64
+		allow   bool
+	}{
+		{"zero", 0, false}, {"floor", .1, false}, {"just_above", .10000001, true}, {"two", 2, true}, {"negative", -.1, false}, {"nan", math.NaN(), false}, {"pos_inf", math.Inf(1), false}, {"neg_inf", math.Inf(-1), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			svc := NewBillingCacheService(&balanceEligibilityCacheStub{balance: tc.balance}, nil, nil, nil, nil, nil, &config.Config{}, nil)
+			t.Cleanup(svc.Stop)
+			err := svc.CheckBillingEligibility(context.Background(), &User{ID: 1}, nil, nil, nil, "")
+			if tc.allow {
+				require.NoError(t, err)
+			} else {
+				require.ErrorIs(t, err, ErrInsufficientBalance)
+			}
+		})
+	}
 }

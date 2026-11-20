@@ -32,6 +32,11 @@ func (r *usageBillingRepository) Apply(ctx context.Context, cmd *service.UsageBi
 		return nil, service.ErrUsageBillingRequestIDRequired
 	}
 
+	if cmd.WalletReservationID != "" {
+		if err := r.EnqueueWalletBilling(ctx, cmd); err != nil {
+			return nil, err
+		}
+	}
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
@@ -47,6 +52,15 @@ func (r *usageBillingRepository) Apply(ctx context.Context, cmd *service.UsageBi
 		return nil, err
 	}
 	if !applied {
+		if cmd.WalletReservationID != "" {
+			if err := settleReservedWallet(ctx, tx, cmd, &service.UsageBillingApplyResult{}, true); err != nil {
+				return nil, err
+			}
+			if err := tx.Commit(); err != nil {
+				return nil, err
+			}
+			tx = nil
+		}
 		return &service.UsageBillingApplyResult{Applied: false}, nil
 	}
 
@@ -178,7 +192,11 @@ func (r *usageBillingRepository) applyUsageBillingEffects(ctx context.Context, t
 		}
 	}
 
-	if cmd.BalanceCost > 0 {
+	if cmd.WalletReservationID != "" {
+		if err := settleReservedWallet(ctx, tx, cmd, result, false); err != nil {
+			return err
+		}
+	} else if cmd.BalanceCost > 0 {
 		newBalance, sufficient, err := deductTeamAwareUsageBillingBalance(ctx, tx, cmd, result) // sub2api-custom: team billing
 		if err != nil {
 			return err

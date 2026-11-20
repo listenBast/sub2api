@@ -17,10 +17,14 @@ var ErrUsageBillingRequestConflict = errors.New("usage billing request fingerpri
 
 // UsageBillingCommand describes one billable request that must be applied at most once.
 type UsageBillingCommand struct {
-	RequestID          string
-	APIKeyID           int64
-	RequestFingerprint string
-	RequestPayloadHash string
+	// Fork-only durable prepayment identity. Exact integer amount is authoritative;
+	// BalanceCost must agree to 8 places and is retained for quota/cache interfaces.
+	WalletReservationID string
+	WalletActualUnits   int64
+	RequestID           string
+	APIKeyID            int64
+	RequestFingerprint  string
+	RequestPayloadHash  string
 
 	UserID              int64
 	AccountID           int64
@@ -139,6 +143,9 @@ func buildUsageBillingFingerprint(c *UsageBillingCommand) string {
 	if payloadHash := strings.TrimSpace(c.RequestPayloadHash); payloadHash != "" {
 		raw += "|" + payloadHash
 	}
+	if c.WalletReservationID != "" {
+		raw += fmt.Sprintf("|wallet:%s:%d", c.WalletReservationID, c.WalletActualUnits)
+	}
 	sum := sha256.Sum256([]byte(raw))
 	return hex.EncodeToString(sum[:])
 }
@@ -170,6 +177,8 @@ type AccountQuotaState struct {
 }
 
 type UsageBillingApplyResult struct {
+	PrepaidBalance bool // available funds were debited at reservation; invalidate caches, never subtract again
+
 	Applied              bool
 	APIKeyQuotaExhausted bool
 	NewBalance           *float64           // post-deduction balance (nil = no balance deduction)
@@ -223,6 +232,7 @@ func buildBatchImageBalanceHoldFingerprint(c *BatchImageBalanceHoldCommand) stri
 	if payloadHash := strings.TrimSpace(c.RequestPayloadHash); payloadHash != "" {
 		raw += "|" + payloadHash
 	}
+
 	sum := sha256.Sum256([]byte(raw))
 	return hex.EncodeToString(sum[:])
 }

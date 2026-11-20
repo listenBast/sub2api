@@ -30,8 +30,10 @@ var errUsageBillingLaneBatchOutcomeMismatch = errors.New("usage billing batch ou
 // 批量生图的冻结/结算/释放直接调用底层仓储。
 // 通道只在本进程内合并同一用户的计费；结算的原子性与幂等性由底层仓储的事务提供。
 type UsageBillingLaneCombiner struct {
-	repo     UsageBillingBatchRepository
-	maxBatch int
+	walletCancel context.CancelFunc
+	walletWG     sync.WaitGroup
+	repo         UsageBillingBatchRepository
+	maxBatch     int
 
 	shards [usageBillingLaneShardCount]usageBillingLaneShard
 	wg     sync.WaitGroup
@@ -81,6 +83,36 @@ func newUsageBillingLaneCombiner(repo UsageBillingBatchRepository, maxBatch int)
 	for i := range c.shards {
 		c.shards[i].lanes = make(map[int64]*usageBillingLane)
 	}
+	if recoverer, ok := repo.(interface {
+		RecoverWalletBilling(context.Context, int) (int, error)
+	}); ok {
+		ctx, cancel := context.WithCancel(context.Background())
+		c.walletCancel = cancel
+		c.walletWG.Add(1)
+		go func() {
+			defer c.walletWG.Done()
+			timer := time.NewTicker(30 * time.Second)
+			defer timer.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+				}
+				call, cancel := context.WithTimeout(ctx, 20*time.Second)
+				_, err := recoverer.RecoverWalletBilling(call, 32)
+				cancel()
+				if err != nil && ctx.Err() == nil {
+					logger.LegacyPrintf("service.usage_billing_lane", "durable wallet recovery unavailable; funds remain reserved")
+				}
+				select {
+				case <-ctx.Done():
+					return
+				case <-timer.C:
+				}
+			}
+		}()
+	}
 	return c
 }
 
@@ -96,6 +128,11 @@ func (c *UsageBillingLaneCombiner) Apply(ctx context.Context, cmd *UsageBillingC
 	}
 	if ctx == nil {
 		ctx = context.Background()
+	}
+	if cmd.WalletReservationID != "" {
+		if err := c.EnqueueWalletBilling(ctx, cmd); err != nil {
+			return nil, err
+		}
 	}
 	req := &usageBillingLaneRequest{ctx: ctx, cmd: cmd, done: make(chan UsageBillingBatchOutcome, 1)}
 	if !c.enqueue(req) {
@@ -122,6 +159,10 @@ func (c *UsageBillingLaneCombiner) ReleaseBatchImageBalance(ctx context.Context,
 func (c *UsageBillingLaneCombiner) Stop() {
 	if c == nil {
 		return
+	}
+	if c.walletCancel != nil {
+		c.walletCancel()
+		c.walletWG.Wait()
 	}
 	for i := range c.shards {
 		shard := &c.shards[i]
@@ -308,4 +349,15 @@ func deliverUsageBillingLaneResult(req *usageBillingLaneRequest, res *UsageBilli
 		res = nil
 	}
 	req.done <- UsageBillingBatchOutcome{Result: res, Err: err}
+}
+
+// EnqueueWalletBilling ensures a successful event is durable before entering
+// process-local lanes. Missing durable support is a strict-path error, not legacy.
+func (c *UsageBillingLaneCombiner) EnqueueWalletBilling(ctx context.Context, cmd *UsageBillingCommand) error {
+	if writer, ok := c.repo.(interface {
+		EnqueueWalletBilling(context.Context, *UsageBillingCommand) error
+	}); ok {
+		return writer.EnqueueWalletBilling(ctx, cmd)
+	}
+	return errors.New("durable wallet billing unavailable")
 }

@@ -40,6 +40,11 @@ func noOverdraftQueryRow(t *testing.T, ctx context.Context, q noOverdraftQuerier
 // seedNoOverdraftUser 建一个成员账号（以及按需建团队和成员关系），返回用户 ID。
 func seedNoOverdraftUser(t *testing.T, ctx context.Context, q noOverdraftQuerier, membership string, personal, team float64) int64 {
 	t.Helper()
+	historical := personal < 0 || team < 0
+	if historical {
+		prepareHistoricalWalletTables(t, ctx, q)
+		defer sealHistoricalWalletTables(t, ctx, q)
+	}
 	n := noOverdraftSeq.Add(1)
 	stamp := time.Now().UnixNano()
 	var userID int64
